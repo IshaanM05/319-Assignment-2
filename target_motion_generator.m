@@ -48,7 +48,10 @@ end
 
 % =========================================================================
 function key = local_key(sc)
-if isstruct(sc) && isfield(sc,'base')            % named motion + custom loss intervals
+if isstruct(sc) && isfield(sc,'stress')          % D1 stress case (high-rate turn + loss)
+    key = sprintf('ST%d', sc.stress);
+    if isfield(sc,'loss'), key = [key mat2str(sc.loss)]; end
+elseif isstruct(sc) && isfield(sc,'base')        % named motion + custom loss intervals
     key = [upper(sc.base) mat2str(sc.loss)];
 elseif isstruct(sc)
     key = sprintf('S%d', sc.seed);
@@ -82,6 +85,19 @@ function C = local_build(sc)
 P = turret_params();
 C.dtm = P.dt_meas;  C.h = 1e-3;  C.T = 10.5;  C.n = round(C.T/C.h) + 1;
 tg = (0:C.n-1)' * C.h;
+if isstruct(sc) && isfield(sc,'stress')
+    [X, Y, VX, VY, AX, AY, loss_auto] = local_stress_traj(sc.stress, tg, P);
+    if isfield(sc,'loss'), C.loss = sc.loss; else, C.loss = loss_auto; end
+    ok = local_check(tg, X, Y, VX, VY, AX, AY, P, false);
+    if ~ok, error('target_motion_generator:bounds', 'Stress case %d violates the envelope.', sc.stress); end
+    C.X = X; C.Y = Y; C.VX = VX; C.VY = VY; C.AX = AX; C.AY = AY;
+    nseed = 4201*sc.stress + 97;
+    rs = RandStream('mt19937ar', 'Seed', nseed);
+    nm = round(10/C.dtm) + 2;
+    C.nr  = P.sig_r  * randn(rs, nm, 1);
+    C.nth = P.sig_th * randn(rs, nm, 1);
+    return
+end
 if isstruct(sc) && ~isfield(sc,'base')
     seed = sc.seed;
     [pos0, v0, segs] = local_random_traj(seed, tg, P);
@@ -191,4 +207,79 @@ for j = 1:n
     t0 = t0 + d + 0.5 + 1.0*rand(rs);
     if t0 > 9.4, loss = loss(1:j,:); break; end
 end
+end
+
+% =========================================================================
+% D1 STRESS SUITE  --  deliberately hard cases that expose the CA baseline's
+% two admitted weaknesses: (i) high TARGET angular rate (close range x high
+% tangential speed, v/r near the loop bandwidth), and (ii) sustained
+% COORDINATED TURNS with a full-duration 0.5 s sensor loss placed INSIDE the
+% turn, so the filter must coast ~1 s open-loop along a curving path (CA
+% extrapolates a parabola; a turn model follows the arc).  A sharp tangential
+% kick is added for the white-jerk stress.  Every case is still re-checked
+% against the Sec. V envelope (800-2000 m, <=150 m/s, <=20 m/s^2).
+% =========================================================================
+function [X, Y, VX, VY, AX, AY, loss] = local_stress_traj(k, tg, P)
+rs = RandStream('mt19937ar', 'Seed', 9000 + k);
+amax = P.a_max;  h = tg(2) - tg(1);  N = numel(tg);
+for attempt = 1:6000
+    r0  = 820 + rand(rs)*360;                      % close-in: 820..1180 m -> higher angular rate
+    th0 = deg2rad(12 + rand(rs)*50);
+    pos0 = r0*[cos(th0); sin(th0)];
+    sp0 = 95 + rand(rs)*55;                         % fast: 95..150 m/s
+    hd  = 2*pi*rand(rs);
+    v0  = sp0*[cos(hd); sin(hd)];
+    % --- turn-rate profile w(t): 2-3 sustained, sign-alternating high-rate turns (t>=1 s)
+    nseg = 2 + (rand(rs) > 0.5);
+    ts = 1 + 0.8*rand(rs);  W = zeros(nseg,3); sgn = 1;
+    for j = 1:nseg
+        D  = 1.6 + 1.8*rand(rs);
+        Wmax = 0.12 + 0.07*rand(rs);                % up to ~0.19 rad/s turn rate
+        W(j,:) = [ts, D, sgn*Wmax];
+        sgn = -sgn;  ts = ts + D + 0.2 + 0.6*rand(rs);
+        if ts > 9, break; end
+    end
+    W = W(1:j,:);
+    % --- one sharp tangential kick (near-bang-bang accel) inside a turn window
+    tk = W(1,1) + 0.3 + 0.5*rand(rs);  Dk = 0.5 + 0.3*rand(rs);  Ak = (2*(rand(rs)>0.5)-1)*(10+6*rand(rs));
+    % --- integrate the coordinated turn
+    X=zeros(N,1); Y=X; VX=X; VY=X; AX=X; AY=X;
+    px=pos0(1); py=pos0(2); vx=v0(1); vy=v0(2);
+    for i = 1:N
+        tt = tg(i); sp = hypot(vx,vy); if sp < 1e-3, sp = 1e-3; end
+        w = 0;
+        for j = 1:size(W,1)
+            u = (tt - W(j,1))/W(j,2);
+            if u>=0 && u<=1                            % trapezoidal: sustained CONSTANT-rate turn
+                if u < 0.2,      sh = (u/0.2);
+                elseif u > 0.8,  sh = ((1-u)/0.2);
+                else,            sh = 1;              % constant-omega plateau (CT model's home turf)
+                end
+                w = w + W(j,3)*sh;
+            end
+        end
+        at = 0; uk = (tt - tk)/Dk;
+        if uk>=0 && uk<=1, at = Ak*sin(pi*uk)^2; end
+        ax = -w*vy + at*vx/sp;                       % lateral (turn) + tangential (kick)
+        ay =  w*vx + at*vy/sp;
+        an = hypot(ax,ay);
+        if an > 0.95*amax, ax = ax*0.95*amax/an; ay = ay*0.95*amax/an; end
+        AX(i)=ax; AY(i)=ay; X(i)=px; Y(i)=py; VX(i)=vx; VY(i)=vy;
+        if i < N
+            vx = vx + ax*h; vy = vy + ay*h; px = px + vx*h; py = py + vy*h;
+        end
+    end
+    if local_check(tg, X, Y, VX, VY, AX, AY, P, true)
+        % loss(es): one full 0.5 s loss inside the first turn's CONSTANT-omega plateau
+        % (forces ~1 s open-loop coast along a curving arc), 50% chance of a second
+        t1 = W(1,1) + 0.5*W(1,2);  t1 = min(max(t1,1.0), 9.0);   % plateau centre
+        loss = [t1, 0.5];
+        if size(W,1) >= 2 && rand(rs) < 0.5
+            t2 = W(2,1) + 0.5*W(2,2);
+            if t2 - (t1+0.5) > 0.6 && t2 < 9.0, loss = [loss; t2, 0.5]; end
+        end
+        return
+    end
+end
+error('target_motion_generator:stress', 'No admissible stress trajectory for k=%d.', k);
 end

@@ -81,7 +81,29 @@ M.rms_pos  = sqrt(mean((L.xh-L.x).^2 + (L.yh-L.y).^2));                       % 
 M.rms_vel  = sqrt(mean((L.vxh-L.vx).^2 + (L.vyh-L.vy).^2));                   % m/s
 % prediction error  |x_pred(t) - x_true(t+tp)|  for t <= 10 - tp
 np = round(tp/dt);  m = 1:(numel(L.t)-np);
-M.rms_pred = sqrt(mean((L.xpx(m)-L.x(m+np)).^2 + (L.xpy(m)-L.y(m+np)).^2));
+pred_err = sqrt((L.xpx(m)-L.x(m+np)).^2 + (L.xpy(m)-L.y(m+np)).^2);
+M.rms_pred = sqrt(mean(pred_err.^2));
+% prediction error restricted to the coast-stressed window: during a loss and the
+% 0.5 s after it (the filter is extrapolating open-loop along a possibly-curved path)
+coast = false(size(L.t));
+li = find(diff([0; L.loss>0]) ~= 0);                 % loss edges
+lw = L.loss > 0;
+for q = 1:numel(L.t)
+    if lw(q), coast(q) = true; end
+end
+coast_ext = coast;
+for q = 2:numel(L.t)                                  % extend 0.5 s past each loss
+    if coast(q-1) && ~coast(q)
+        coast_ext(q:min(q+round(0.5/dt),numel(L.t))) = true;
+    end
+end
+cm = coast_ext(m);
+if any(cm), M.rms_pred_loss = sqrt(mean(pred_err(cm).^2)); else, M.rms_pred_loss = NaN; end
+% position estimation error during loss windows only
+if any(lw), M.rms_pos_loss = sqrt(mean((L.xh(lw)-L.x(lw)).^2 + (L.yh(lw)-L.y(lw)).^2));
+else, M.rms_pos_loss = NaN; end
+% true LOS angular rate (from truth) -- used for the high-rate pointing metric
+r2 = L.x.^2 + L.y.^2;  thd_los = (L.x.*L.vy - L.y.*L.vx)./max(r2,1e-9);
 % elevation errors
 e_ref = L.thref - L.th;                         % loop tracking error
 e_los = L.theta_los - L.th;                     % pointing error w.r.t. the object's actual LOS
@@ -95,6 +117,10 @@ if isfinite(tacq)
     q = L.t >= tacq;
     M.rms_eref_acq = sqrt(mean(e_ref(q).^2));
     M.rms_elos_acq = sqrt(mean(e_los(q).^2));
+    M.max_elos_acq = max(abs(e_los(q)));                        % peak pointing error post-acq (rad)
+    % pointing error during HIGH angular-rate windows (where lag-match breaks down)
+    hr = q & (abs(thd_los) > 0.10);                            % |LOS rate| > 0.10 rad/s
+    if any(hr), M.rms_elos_hirate = sqrt(mean(e_los(hr).^2)); else, M.rms_elos_hirate = NaN; end
     M.max_miss_acq = max(L.dperp(q));               % NOTE: by construction this sits near the 10 m
                                                       % crossing threshold itself (it is the boundary
                                                       % point of the "acquired" definition) -- use
@@ -111,6 +137,7 @@ if isfinite(tacq)
 else
     M.rms_eref_acq = NaN; M.rms_elos_acq = NaN; M.max_miss_acq = NaN; M.rms_miss_acq = NaN;
     M.max_miss_acq_buf = NaN; M.rms_miss_acq_buf = NaN;
+    M.max_elos_acq = NaN; M.rms_elos_hirate = NaN;
 end
 M.n_pulses = size(L.pulses,1);
 M.n_success = sum(L.pulses(:,3) == 1);

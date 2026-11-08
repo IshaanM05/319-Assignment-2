@@ -47,11 +47,41 @@ P.sig_v0   = 100;       % m/s   initial velocity 1-sigma (large)
 P.sig_a0   = 15;        % m/s^2 initial acceleration 1-sigma (large)
 P.tp       = 0.5;       % s     prediction horizon (FIXED by the assignment)
 P.pred_model = 'CA';    % 'CA' (default) or 'CV' (ablation only)
+% ---- v2 estimator selector (baseline = 'CA') --------------------------------
+P.est      = 'CA';      % 'CA' (baseline) | 'adaptQ' (NIS-adaptive Q) | 'IMM' (CV/CA/CT)
+%   adaptive-Q (A2): detect a manoeuvre via normalized innovation squared (NIS,
+%   chi-square with 2 dof) and transiently inflate the jerk PSD.
+P.aq_gate  = 9.21;      % chi2inv(0.99,2): NIS gate above which a manoeuvre is declared
+P.aq_boost = 50;        % jerk-PSD multiplier applied on detection
+P.aq_relax = 0.6;       % geometric decay of the multiplier toward 1 each measurement
+%   IMM (A1): three 6-state models in a common [x y vx vy ax ay] frame.
+P.imm_q_cv    = 3;      % m^2/s^3   CV (white-acceleration) process spectral density
+P.imm_q_ca    = 200;    % m^2/s^5   CA jerk PSD (matches the baseline single model)
+P.imm_q_ct    = 150;    % m^2/s^5   CT base jerk PSD
+P.imm_q_omega = 6.0;    % (rad/s^2)^2 extra accel-state process var for the turn model
+P.imm_TPM     = [0.95 0.025 0.025;    % CV
+                 0.025 0.95 0.025;    % CA
+                 0.025 0.025 0.95];   % CT   (row = from, col = to)
 % ---- compensator -------------------------------------------------------------
-P.ctrl      = 'lag';    % 'lag' = Kp/(1+s/p)  (final);  'pi' = suggested PI (ablation)
+%   FINALIZED controller: 2-DOF LTI = lag-matched feedback + model-inverse
+%   feedforward.  The feedback is the brief's LTI compensator; the feedforward is
+%   an LTI, analytically-DERIVED (not tuned) path that holds the closed-loop
+%   group delay at t_p accurately under angular acceleration.  Ablations:
+%   'lag' (feedback only), 'pi' (brief's suggested PI).
+P.ctrl      = 'lagff';  % 'lagff' = lag + 2-DOF feedforward (FINAL) | 'lag' | 'pi' (ablations)
 P.tp_design = 0.5;      % s     lag the loop is DESIGNED to have (= tp)
 P.Kp_pi = 1800; P.Ti_pi = 1.0;     % suggested PI starting values (ablation only)
 P.Kp_lag = []; P.p_lag = [];       % derived below unless overridden
+P.tp_ff  = 0.0;         % s   the loop tracks the t_p-ahead reference with the prescribed
+                        %     delay t_p; its t_p-delay is the current estimate, so the
+                        %     feedback is driven by the current estimate with rate feedforward
+% ---- acquisition mode --------------------------------------------------------
+%   FINALIZED: a bounded dual-mode acquisition FRONT-END (near-time-optimal slew
+%   then bumpless hand-off to the LTI tracker).  The engagement-phase controller
+%   is the LTI 2-DOF design above.  Ablation: 'linear' (LTI tracker throughout).
+P.acq      = 'dualmode';% 'dualmode' (FINAL) | 'linear' (ablation)
+P.acq_band = deg2rad(2.5);   % switch from max-rate slew to fine tracking inside this error
+P.acq_Kp   = 20000;     % V/rad  slew-phase gain (saturates -> max-rate slew)
 P = local_derive(P);
 end
 
@@ -63,4 +93,10 @@ P.Kdc  = P.N*P.Kt / (P.N^2*P.Kt*P.Ke + P.Rm*P.b);               % 9.985e-4
 P.Kp_eff = P.Kp_lag; P.p_eff = P.p_lag;
 if isempty(P.Kp_eff), P.Kp_eff = 1/(P.tp_design*P.Kdc); end    % 2003 V/rad
 if isempty(P.p_eff),  P.p_eff  = 2/P.tp_design;          end    % 4 rad/s
+% 2-DOF feedforward gains (model-inverse, DERIVED not tuned):
+%   V_ff = thdot_ref/Kdc  drives the mount at the reference's own angular rate
+%   (back-emf term);  the accel term supplies the armature-resistance voltage
+%   needed to source the current for J_eq*thddot of torque.
+P.kff_v = 1/P.Kdc;                       % V per rad/s   (rate feedforward)
+P.kff_a = P.Rm*P.J_eq/(P.N*P.Kt);        % V per rad/s^2 (acceleration feedforward)
 end
