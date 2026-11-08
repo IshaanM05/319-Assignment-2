@@ -1,7 +1,7 @@
 # Predictive Tracking and Elevation Pointing Control for a Maneuvering Object
 
 ME319 Control Systems (Autumn 2026, S3), IIT Bombay — bonus assignment.
-Author: Ishaan Mondal.
+Author: Ishaan Mondal. Repository: https://github.com/IshaanM05/319-Assignment-2
 
 One fixed estimator/predictor/controller design (never retuned) for the elevation
 axis of a single-axis pointing mount: a constant-acceleration (CA) Kalman filter in
