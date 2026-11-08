@@ -1,0 +1,19 @@
+# LaTeX build artifacts (paper.pdf itself is committed; these are not)
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.toc
+paper/*.bbl
+paper/*.blg
+paper/*.synctex.gz
+paper/*.fls
+paper/*.fdb_latexmk
+paper/build*.log
+
+# MATLAB
+*.asv
+*.m~
+
+# OS
+.DS_Store
+Thumbs.db
