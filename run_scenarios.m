@@ -1,7 +1,8 @@
-%RUN_SCENARIOS  Scenarios A, B, C over the FULL 0..10 s: figures + metrics table.
+%RUN_SCENARIOS  Standardized scenarios A, B, C over the full 0..10 s: figures + metrics table.
 %   Writes figures/fig_scenario_{A,B,C}.{png,pdf}, figures/fig_cov.{png,pdf},
 %   results/scenario_metrics.csv, results/scenario_metrics.tex, results/scenarios.mat
 clear; close all; clc;
+paper_figure_style();
 root = fileparts(mfilename('fullpath'));
 figdir = fullfile(root,'figures'); resdir = fullfile(root,'results');
 if ~isfolder(figdir), mkdir(figdir); end
@@ -63,12 +64,13 @@ ylim(ax, yl); uistack(findobj(ax,'Type','patch'),'bottom');
 end
 
 function plot_scenario(L, name, figdir)
-f = figure('Position',[50 50 1000 800],'Visible','off'); tl = tiledlayout(3,2,'TileSpacing','compact','Padding','compact');
+f = figure('Position',[50 50 1000 800],'Visible','off','DefaultAxesFontSize',9);
+tl = tiledlayout(3,2,'TileSpacing','compact','Padding','compact');
 d2 = @(v) rad2deg(v);
 % (a) trajectory
 ax = nexttile; plot(L.x, L.y, 'k', 'LineWidth', 1.6); hold on; plot(L.xh, L.yh, 'b--', 'LineWidth', 1.1); plot(L.xpx, L.xpy, 'r:', 'LineWidth', 1.3);
 plot(L.x(1), L.y(1), 'ko', 'MarkerFaceColor', 'k'); axis equal; grid on; xlabel('x [m]'); ylabel('y [m]');
-legend('true','estimated (now)','predicted (t+0.5 s)','Location','best','FontSize',7); title('(a) Object trajectory');
+legend('true','estimated (now)','predicted (t+0.5 s)','Location','best','FontSize',7); title('(a) Target trajectory');
 % (b) estimation / prediction errors
 ax = nexttile; ex = L.xh - L.x; ey = L.yh - L.y;
 np = round(L.P.tp/(L.t(2)-L.t(1))); m = 1:(numel(L.t)-np);
@@ -78,7 +80,7 @@ plot(L.t, 3*L.sx, 'b:', L.t, -3*L.sx, 'b:'); ylim([-10 15]); grid on; xlabel('t 
 legend('x err','y err','|pred. err| (vs x(t+0.5))','\pm3\sigma_x','Location','northeast','FontSize',6); title('(b) Estimation and prediction error'); shade_loss(ax, L);
 % (c) elevation
 ax = nexttile; plot(L.t, d2(L.thref), 'r--', L.t, d2(L.th), 'b', L.t, d2(L.theta_los), 'k:', 'LineWidth', 1.3); grid on;
-xlabel('t [s]'); ylabel('elevation [deg]'); legend('\theta_{ref}','\theta_{turret}','actual LOS','Location','southeast','FontSize',7); title('(c) Reference, mount and LOS angle'); shade_loss(ax, L);
+xlabel('t [s]'); ylabel('elevation [deg]'); legend('\theta_{ref}','\theta_{turret}','actual LOS','Location','southeast','FontSize',7); title('(c) Predicted reference, turret and LOS angle'); shade_loss(ax, L);
 % (d) tracking error
 ax = nexttile; plot(L.t, d2(L.thref - L.th), 'r', L.t, d2(L.theta_los - L.th), 'b', 'LineWidth', 1.0); grid on; ylim([-1.5 1.5]);
 xlabel('t [s]'); ylabel('error [deg]'); legend('\theta_{ref}-\theta_{turret}','\theta_{LOS}-\theta_{turret}','Location','northeast','FontSize',7);
@@ -89,12 +91,13 @@ if ~isempty(L.pulses)
     ok = L.pulses(:,3) == 1;
     plot(L.pulses(ok,1), max(L.pulses(ok,2),1e-2), 'go', 'MarkerFaceColor', 'g'); plot(L.pulses(~ok,1), max(L.pulses(~ok,2),1e-2), 'rx', 'MarkerSize', 9, 'LineWidth', 2);
 end
-xlabel('t [s]'); ylabel('perp. miss distance [m]'); title('(e) Miss distance, pulses (o hit, x miss), R_{eng}=2 m'); shade_loss(ax, L);
+xlabel('t [s]'); ylabel('perp. miss distance [m]'); title('(e) Miss distance and engagement pulses (o hit, x miss), R_{eng}=2 m'); shade_loss(ax, L);
 % (f) control voltage
 ax = nexttile; plot(L.t, L.Vun, 'Color', [0.7 0.7 0.7]); hold on; plot(L.t, L.V, 'b', 'LineWidth', 1.2); yline(240, 'r:'); yline(-240, 'r:'); grid on; ylim([-300 300]);
 xlabel('t [s]'); ylabel('V_m [V]'); legend('compensator state','V_m applied','Location','northeast','FontSize',7); title('(f) Motor voltage and saturation'); shade_loss(ax, L);
-title(tl, sprintf('Scenario %s  (full 0-10 s;  yellow = sensor loss)', name));
-exportgraphics(f, fullfile(figdir, ['fig_scenario_' name '.png']), 'Resolution', 250); exportgraphics(f, fullfile(figdir, ['fig_scenario_' name '.pdf']));
+ttl = title(tl, sprintf('Scenario %s  (full 0-10 s;  yellow = measurement loss)', name));
+ttl.Color = 'k';
+exportgraphics(f, fullfile(figdir, ['fig_scenario_' name '.png']), 'Resolution', 250, 'BackgroundColor', 'white'); exportgraphics(f, fullfile(figdir, ['fig_scenario_' name '.pdf']), 'BackgroundColor', 'white');
 close(f);
 end
 
@@ -108,5 +111,5 @@ legend(names{[2 3 4]}, 'Location', 'northeast', 'FontSize', 7); title('Position 
 ax2 = subplot(1,2,2); hold on;
 for i = [2 3 4], semilogy(R{i}.t, R{i}.sy, cl{i}, 'LineWidth', 1.1); end
 set(gca,'YScale','log'); grid on; xlabel('t [s]'); ylabel('\sigma_y [m]'); xlim([0 6]); title('Position std. dev. \sigma_y');
-exportgraphics(f, fullfile(figdir, 'fig_cov.png'), 'Resolution', 250); exportgraphics(f, fullfile(figdir, 'fig_cov.pdf')); close(f);
+exportgraphics(f, fullfile(figdir, 'fig_cov.png'), 'Resolution', 250, 'BackgroundColor', 'white'); exportgraphics(f, fullfile(figdir, 'fig_cov.pdf'), 'BackgroundColor', 'white'); close(f);
 end

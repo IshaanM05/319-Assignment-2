@@ -1,21 +1,26 @@
 function L = simulate_case(scenario, ovr, ctrl_dt)
-%SIMULATE_CASE  Closed-loop simulation of one case over the FULL 0 <= t <= 10 s.
-%   L = simulate_case(scenario)        scenario: 'A','B','C' or struct('seed',n[,'loss',..])
+%SIMULATE_CASE  Closed-loop simulation of one engagement over the full 0 <= t <= 10 s.
+%   L = simulate_case(scenario)        scenario: 'A','B','C', or struct('seed',n[,'loss',..])
 %   L = simulate_case(scenario, ovr)   ovr: struct of turret_params overrides (ablations only)
 %   L = simulate_case(scenario, ovr, ctrl_dt)  controller call period (default 1 ms;
 %       must be a multiple of 1 ms; a measurement that arrives between two calls is
 %       latched and delivered at the next call)
 %
-%   Fixed-step RK4 (1 ms) of the plant [theta, theta_dot, i]; the controller is
-%   called every step (zero-order hold on V_m).  Pulse logic (driver side):
-%   a pulse is issued on a 0->1 edge of fire_cmd if >= 1.0 s since the last
-%   issued pulse; premature edges are ignored.  A pulse succeeds when the true
-%   perpendicular distance object-to-beam is <= R_eng = 2 m with the object on
-%   the forward side.
+%   Fixed-step RK4 (1 ms) integration of the elevation drive
+%   [theta_turret, theta_dot_turret, i]; the controller is called every step
+%   (zero-order hold on V_m).  Engagement-pulse logic (driver side, exactly as
+%   the brief specifies): a pulse is issued on a 0->1 edge of fire_cmd if at
+%   least t_recharge = 1.0 s has elapsed since the last issued pulse; premature
+%   edges are ignored.  A pulse succeeds when the true perpendicular distance
+%   from the target to the laser ray is <= R_eng = 2 m with the target on the
+%   forward side of the turret.
+%
+%   L holds the full time histories used for every figure and metric, and
+%   L.metrics the scalar performance measures reported in the paper.
 clear turret_controller target_motion_generator turret_params turret_plant
 if nargin > 1 && ~isempty(ovr), turret_params(ovr); end
 P = turret_params();
-dt = 1e-3;  Tend = 10;  n = round(Tend/dt);
+dt = P.dt_sim;  Tend = P.T_end;  n = round(Tend/dt);
 if nargin < 3 || isempty(ctrl_dt), ctrl_dt = dt; end
 mstep = round(ctrl_dt/dt);  rm_l = NaN; thm_l = NaN; pend = false;
 X = [0; 0; 0];                                    % theta, theta_dot, i  (all zero at t = 0)
@@ -38,8 +43,8 @@ for k = 0:n
     else
         fire = 0;                                                % fire_cmd is a one-sample signal
     end
-    % ---- driver-side pulse handling
-    if fire && ~fire_prev && (t - t_last) >= P.t_refr - 1e-9
+    % ---- driver-side engagement-pulse handling
+    if fire && ~fire_prev && (t - t_last) >= P.t_recharge - 1e-9
         c = cos(X(1)); s = sin(X(1));
         dtrue = abs(tr.x*s - tr.y*c);  fw = tr.x*c + tr.y*s;
         ok = (dtrue <= P.R_eng) && (fw > 0);
@@ -56,7 +61,7 @@ for k = 0:n
     L.sigperp(j)=dbg.sig_perp; L.loss(j)=tr.in_loss;
     c = cos(X(1)); s = sin(X(1));
     L.dperp(j) = abs(tr.x*s - tr.y*c);
-    if (tr.x*c + tr.y*s) <= 0, L.dperp(j) = hypot(tr.x,tr.y); end   % behind the mount: no valid beam
+    if (tr.x*c + tr.y*s) <= 0, L.dperp(j) = hypot(tr.x,tr.y); end   % behind the turret: no valid ray
     if k == n, break; end
     % ---- RK4 plant step with V held
     k1 = RK(t, V, X);  k2 = RK(t+dt/2, V, X+dt/2*k1);
@@ -85,12 +90,7 @@ pred_err = sqrt((L.xpx(m)-L.x(m+np)).^2 + (L.xpy(m)-L.y(m+np)).^2);
 M.rms_pred = sqrt(mean(pred_err.^2));
 % prediction error restricted to the coast-stressed window: during a loss and the
 % 0.5 s after it (the filter is extrapolating open-loop along a possibly-curved path)
-coast = false(size(L.t));
-li = find(diff([0; L.loss>0]) ~= 0);                 % loss edges
-lw = L.loss > 0;
-for q = 1:numel(L.t)
-    if lw(q), coast(q) = true; end
-end
+coast = L.loss > 0;
 coast_ext = coast;
 for q = 2:numel(L.t)                                  % extend 0.5 s past each loss
     if coast(q-1) && ~coast(q)
@@ -100,16 +100,16 @@ end
 cm = coast_ext(m);
 if any(cm), M.rms_pred_loss = sqrt(mean(pred_err(cm).^2)); else, M.rms_pred_loss = NaN; end
 % position estimation error during loss windows only
-if any(lw), M.rms_pos_loss = sqrt(mean((L.xh(lw)-L.x(lw)).^2 + (L.yh(lw)-L.y(lw)).^2));
+if any(coast), M.rms_pos_loss = sqrt(mean((L.xh(coast)-L.x(coast)).^2 + (L.yh(coast)-L.y(coast)).^2));
 else, M.rms_pos_loss = NaN; end
 % true LOS angular rate (from truth) -- used for the high-rate pointing metric
 r2 = L.x.^2 + L.y.^2;  thd_los = (L.x.*L.vy - L.y.*L.vx)./max(r2,1e-9);
 % elevation errors
 e_ref = L.thref - L.th;                         % loop tracking error
-e_los = L.theta_los - L.th;                     % pointing error w.r.t. the object's actual LOS
-M.rms_eref_full = sqrt(mean(e_ref.^2));         % rad (includes initial slew)
+e_los = L.theta_los - L.th;                     % pointing error w.r.t. the target's actual LOS
+M.rms_eref_full = sqrt(mean(e_ref.^2));         % rad (includes the initial slew)
 M.rms_elos_full = sqrt(mean(e_los.^2));
-% acquisition time: last time the true miss distance was > 10 m
+% acquisition time: last time the true beam-to-target miss exceeded 10 m
 idx = find(L.dperp > 10, 1, 'last');
 if isempty(idx), tacq = 0; elseif idx == numel(L.t), tacq = NaN; else, tacq = L.t(idx+1); end
 M.t_acq = tacq;
@@ -118,14 +118,14 @@ if isfinite(tacq)
     M.rms_eref_acq = sqrt(mean(e_ref(q).^2));
     M.rms_elos_acq = sqrt(mean(e_los(q).^2));
     M.max_elos_acq = max(abs(e_los(q)));                        % peak pointing error post-acq (rad)
-    % pointing error during HIGH angular-rate windows (where lag-match breaks down)
+    % pointing error during HIGH angular-rate windows (where the lag match degrades)
     hr = q & (abs(thd_los) > 0.10);                            % |LOS rate| > 0.10 rad/s
     if any(hr), M.rms_elos_hirate = sqrt(mean(e_los(hr).^2)); else, M.rms_elos_hirate = NaN; end
-    M.max_miss_acq = max(L.dperp(q));               % NOTE: by construction this sits near the 10 m
-                                                      % crossing threshold itself (it is the boundary
-                                                      % point of the "acquired" definition) -- use
-                                                      % max_miss_acq_buf / rms_miss_acq for the actual
-                                                      % steady-state accuracy reported in the paper.
+    % NOTE: max_miss_acq is the boundary value of the "acquired" definition itself
+    % (the true miss at the 10 m crossing), so it is NOT an accuracy measure; the
+    % engagement accuracy reported in the paper is rms_miss_acq_buf / max_miss_acq_buf
+    % over a buffered window that excludes the capture transient.
+    M.max_miss_acq = max(L.dperp(q));
     M.rms_miss_acq = sqrt(mean(L.dperp(q).^2));
     qb = L.t >= (tacq + 0.75);                       % buffered window: excludes the crossing transient
     if any(qb)

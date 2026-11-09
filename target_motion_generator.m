@@ -1,25 +1,37 @@
 function [r_meas, theta_meas, meas_valid, truth] = target_motion_generator(t, scenario)
-%TARGET_MOTION_GENERATOR  Object trajectory + noisy 20 Hz polar radar measurements.
+%TARGET_MOTION_GENERATOR  V-44 target trajectory + noisy 20 Hz polar radar returns.
 %
 %   [r_meas, theta_meas, meas_valid] = target_motion_generator(t, scenario)
-%   [..., truth] = ...   optional 4th output: true state at time t
-%                        (x,y,vx,vy,ax,ay,in_loss) - used by the simulation
-%                        driver for scoring ONLY, never by the controller.
+%   [..., truth] = ...   optional 4th output: the true state at time t
+%                        (x, y, vx, vy, ax, ay, in_loss), used by the simulation
+%                        driver for scoring ONLY -- never by the controller.
 %
-%   scenario : 'A' non-manoeuvring | 'B' manoeuvring (from t = 1 s)
-%              'C' = 'B' + sensor loss of 0.50 s starting at t = 1.00 s
+%   scenario : 'A' nominal (non-manoeuvring) motion
+%              'B' manoeuvring target, both x and y, from t = 1 s
+%              'C' = 'B' + a measurement loss of t_bo = 0.50 s at t_boo = 1.00 s
 %              (numeric 1/2/3 are accepted as aliases)
-%              struct with fields  .seed  (integer: randomised bounded manoeuvre,
-%              noise realisation derived from the seed) and optionally
+%              struct with .seed  (integer: randomized bounded manoeuvre, noise
+%              realisation derived from the seed) and optionally
 %              .loss = [t_onset dur; ...]  (rows; each dur <= 0.5, onset >= 1).
+%              .case is accepted as an alias for .seed, and any other string
+%              identifier is mapped deterministically to one randomized case of
+%              this envelope-respecting family (a stand-in so that an evaluation
+%              script passing its own case names still runs the closed loop).
 %
-%   Measurements are produced when t crosses a multiple of 0.05 s; every other
-%   call returns meas_valid = false and NaN measurements.  Samples inside a loss
-%   interval [t0, t0+dur) are dropped.
+%   Measurements are produced when t crosses a multiple of dt_meas = 0.05 s;
+%   every other call returns meas_valid = false and NaN measurements.  Samples
+%   inside a loss interval [t0, t0+dur) are dropped, so the loss is a true
+%   measurement outage while the target keeps moving.
 %
-%   Envelope enforced for EVERY generated trajectory (error / rejection otherwise):
-%       800 <= r <= 2000 m,  |v| <= 150 m/s,  |a| <= 20 m/s^2,  smooth a(t).
-%   Clear state between runs with  `clear target_motion_generator`.
+%   Operating envelope enforced for EVERY generated trajectory (the generator
+%   errors out rather than violate it):  800 <= r <= 2000 m, |v| <= 150 m/s,
+%   |a| <= 20 m/s^2, smooth a(t), and the target kept in front of the turret
+%   and inside its elevation field of regard.
+%
+%   The scenario is identified by a key, so calling with a different scenario (or
+%   a new run where t goes backwards) rebuilds the trajectory and the noise
+%   realisation.  Clear the state between runs with
+%   `clear target_motion_generator`.
 persistent C
 if nargin < 2 || isempty(scenario), scenario = 'A'; end
 key = local_key(scenario);
@@ -48,13 +60,13 @@ end
 
 % =========================================================================
 function key = local_key(sc)
-if isstruct(sc) && isfield(sc,'stress')          % D1 stress case (high-rate turn + loss)
+if isstruct(sc) && isfield(sc,'stress')          % stress case (high-rate turn + loss)
     key = sprintf('ST%d', sc.stress);
     if isfield(sc,'loss'), key = [key mat2str(sc.loss)]; end
 elseif isstruct(sc) && isfield(sc,'base')        % named motion + custom loss intervals
     key = [upper(sc.base) mat2str(sc.loss)];
-elseif isstruct(sc)
-    key = sprintf('S%d', sc.seed);
+elseif isstruct(sc) && (isfield(sc,'seed') || isfield(sc,'case'))
+    key = sprintf('S%d', local_seed(sc));
     if isfield(sc,'loss'), key = [key mat2str(sc.loss)]; end
 elseif isnumeric(sc)
     key = char('A' + sc - 1);
@@ -63,8 +75,27 @@ else
 end
 end
 
+function s = local_seed(sc)
+% Integer seed of a randomized case; .case is accepted as an alias for .seed.
+if isfield(sc,'seed') && ~isempty(sc.seed)
+    s = sc.seed;
+else
+    s = sc.case;
+end
+end
+
 function n = local_name(sc)
-if isstruct(sc), n = sc.base; elseif isnumeric(sc), n = char('A' + sc - 1); else, n = char(sc); end
+if isstruct(sc) && isfield(sc,'base'), n = sc.base;
+elseif isstruct(sc) && (isfield(sc,'seed') || isfield(sc,'case')), n = '';
+elseif isnumeric(sc), n = char('A' + sc - 1);
+else, n = char(sc); end
+end
+
+function s = local_string_seed(str)
+% Deterministic integer seed for an arbitrary case identifier (polynomial hash).
+v = double(upper(str));  s = 0;
+for k = 1:numel(v), s = mod(31*s + v(k), 100000); end
+s = 1000 + s;
 end
 
 function tf = local_in_loss(loss, t)
@@ -83,34 +114,33 @@ end
 % -------------------------------------------------------------------------
 function C = local_build(sc)
 P = turret_params();
-C.dtm = P.dt_meas;  C.h = 1e-3;  C.T = 10.5;  C.n = round(C.T/C.h) + 1;
+C.dtm = P.dt_meas;  C.h = P.dt_sim;  C.T = P.T_end + 0.5;  C.n = round(C.T/C.h) + 1;
+n_samp = round(P.T_end/C.dtm) + 2;
 tg = (0:C.n-1)' * C.h;
 if isstruct(sc) && isfield(sc,'stress')
     [X, Y, VX, VY, AX, AY, loss_auto] = local_stress_traj(sc.stress, tg, P);
     if isfield(sc,'loss'), C.loss = sc.loss; else, C.loss = loss_auto; end
-    ok = local_check(tg, X, Y, VX, VY, AX, AY, P, false);
+    ok = local_check(tg, X, Y, VX, VY, AX, AY, P);
     if ~ok, error('target_motion_generator:bounds', 'Stress case %d violates the envelope.', sc.stress); end
     C.X = X; C.Y = Y; C.VX = VX; C.VY = VY; C.AX = AX; C.AY = AY;
-    nseed = 4201*sc.stress + 97;
-    rs = RandStream('mt19937ar', 'Seed', nseed);
-    nm = round(10/C.dtm) + 2;
-    C.nr  = P.sig_r  * randn(rs, nm, 1);
-    C.nth = P.sig_th * randn(rs, nm, 1);
+    rs = RandStream('mt19937ar', 'Seed', 4201*sc.stress + 97);
+    C.nr  = P.sig_r  * randn(rs, n_samp, 1);
+    C.nth = P.sig_th * randn(rs, n_samp, 1);
     return
 end
-if isstruct(sc) && ~isfield(sc,'base')
-    seed = sc.seed;
+if isstruct(sc) && ~isfield(sc,'base') && (isfield(sc,'seed') || isfield(sc,'case'))
+    seed = local_seed(sc);
     [pos0, v0, segs] = local_random_traj(seed, tg, P);
     if isfield(sc,'loss')
         C.loss = sc.loss;
     else
-        C.loss = local_random_loss(seed);
+        C.loss = local_random_loss(seed, P);
     end
     nseed = 7919*seed + 13;
 else
     nm_ = upper(local_name(sc));
     switch nm_
-        case 'A'      % non-manoeuvring: constant velocity
+        case 'A'      % nominal: constant-velocity, non-manoeuvring
             pos0 = [1250; 650];  v0 = [-45; 12];  segs = zeros(0,5);  C.loss = zeros(0,2);
         case {'B','C'}
             pos0 = [1300; 600];  v0 = [-35; -5];
@@ -118,23 +148,25 @@ else
             segs = [ 1.0      5.0  -10.0  15.0   1;
                      5.5      4.0    9.0 -12.0   2 ];
             C.loss = zeros(0,2);
-            if strcmp(nm_,'C'), C.loss = [1.00 0.50]; end
+            if strcmp(nm_,'C'), C.loss = [P.t_boo_min P.t_bo_max]; end
             if isstruct(sc), C.loss = sc.loss; end
-        otherwise
-            error('target_motion_generator:scenario', 'Unknown scenario "%s".', nm_);
+        otherwise     % unseen case identifier -> deterministic randomized stand-in
+            seed = local_string_seed(nm_);
+            [pos0, v0, segs] = local_random_traj(seed, tg, P);
+            C.loss = local_random_loss(seed, P);
+            nm_ = '?';
     end
-    nseed = 12345 + double(nm_);
+    if ~strcmp(nm_,'?'), nseed = 12345 + double(nm_); else, nseed = 7919*seed + 13; end
     if strcmp(nm_,'C'), nseed = 12345 + double('B'); end   % C = same motion AND noise as B
 end
 [X, Y, VX, VY, AX, AY] = local_integrate(tg, pos0, v0, segs);
-ok = local_check(tg, X, Y, VX, VY, AX, AY, P, false);
-if ~ok && (~isstruct(sc) || isfield(sc,'base')), error('target_motion_generator:bounds', 'Scenario violates the operating envelope.'); end
+ok = local_check(tg, X, Y, VX, VY, AX, AY, P);
+if ~ok, error('target_motion_generator:bounds', 'Scenario violates the operating envelope.'); end
 C.X = X; C.Y = Y; C.VX = VX; C.VY = VY; C.AX = AX; C.AY = AY;
 % measurement-noise realisation (independent of how often the function is called)
 rs = RandStream('mt19937ar', 'Seed', nseed);
-nm = round(10/C.dtm) + 2;
-C.nr  = P.sig_r  * randn(rs, nm, 1);
-C.nth = P.sig_th * randn(rs, nm, 1);
+C.nr  = P.sig_r  * randn(rs, n_samp, 1);
+C.nth = P.sig_th * randn(rs, n_samp, 1);
 end
 
 function [X, Y, VX, VY, AX, AY] = local_integrate(tg, pos0, v0, segs)
@@ -157,8 +189,9 @@ X  = pos0(1) + [0; cumsum((VX(1:end-1)+VX(2:end))/2*h)];
 Y  = pos0(2) + [0; cumsum((VY(1:end-1)+VY(2:end))/2*h)];
 end
 
-function ok = local_check(tg, X, Y, VX, VY, AX, AY, P, strictTheta) %#ok<INUSD>
-m = tg <= 10 + 1e-9;
+function ok = local_check(tg, X, Y, VX, VY, AX, AY, P)
+% Operating-envelope check over the standardized engagement 0 <= t <= T_end.
+m = tg <= P.T_end + 1e-9;
 r = hypot(X(m), Y(m)); v = hypot(VX(m), VY(m)); a = hypot(AX(m), AY(m));
 th = atan2(Y(m), X(m));
 ok = all(r >= P.r_min) && all(r <= P.r_max) && all(v <= P.v_max) && all(a <= P.a_max + 1e-9) ...
@@ -166,8 +199,9 @@ ok = all(r >= P.r_min) && all(r <= P.r_max) && all(v <= P.v_max) && all(a <= P.a
 end
 
 function [pos0, v0, segs] = local_random_traj(seed, tg, P)
-% Randomised bounded manoeuvre: 1-3 smooth acceleration segments, the first
-% starting at t >= 1 s, in a random direction (so both x and y move).
+% Randomised bounded manoeuvre: 1-3 smooth acceleration segments in random
+% directions (so the target moves in both x and y), the first starting at
+% t >= 1 s; every candidate is re-checked against the envelope before acceptance.
 rs = RandStream('mt19937ar', 'Seed', seed);
 for attempt = 1:5000
     r0  = P.r_min + 100 + rand(rs)*(P.r_max - P.r_min - 300);   % 900 .. 1900 m
@@ -187,37 +221,38 @@ for attempt = 1:5000
     end
     % scale so that the peak |a| respects a_max (with a 5% margin)
     [~,~,~,~,AX,AY] = local_integrate(tg, pos0, v0, segs);
-    pk = max(hypot(AX(tg<=10), AY(tg<=10)));
+    pk = max(hypot(AX(tg<=P.T_end), AY(tg<=P.T_end)));
     if pk > 0.95*P.a_max, segs(:,3:4) = segs(:,3:4) * (0.95*P.a_max/pk); end
     [X,Y,VX,VY,AX,AY] = local_integrate(tg, pos0, v0, segs);
-    if local_check(tg, X, Y, VX, VY, AX, AY, P, true), return; end   % accept
+    if local_check(tg, X, Y, VX, VY, AX, AY, P), return; end   % accept
 end
 error('target_motion_generator:reject', 'No admissible random trajectory found.');
 end
 
-function loss = local_random_loss(seed)
-% one or two loss intervals; durations in [0.1, 0.5] s; onset >= 1.0 s
+function loss = local_random_loss(seed, P)
+% One or two measurement-loss intervals: duration in [0.1, t_bo_max] s and onset
+% no earlier than t_boo_min = 1.0 s, both inside the brief's loss constraints.
 rs = RandStream('mt19937ar', 'Seed', 31*seed + 7);
 n = 1 + (rand(rs) < 0.3);
 loss = zeros(n,2);
-t0 = 1 + 7.5*rand(rs);
+t0 = P.t_boo_min + 7.5*rand(rs);
 for j = 1:n
-    d = 0.1 + 0.4*rand(rs);
+    d = 0.1 + (P.t_bo_max - 0.1)*rand(rs);
     loss(j,:) = [t0, d];
     t0 = t0 + d + 0.5 + 1.0*rand(rs);
-    if t0 > 9.4, loss = loss(1:j,:); break; end
+    if t0 > P.T_end - 0.6, loss = loss(1:j,:); break; end
 end
 end
 
 % =========================================================================
-% D1 STRESS SUITE  --  deliberately hard cases that expose the CA baseline's
-% two admitted weaknesses: (i) high TARGET angular rate (close range x high
-% tangential speed, v/r near the loop bandwidth), and (ii) sustained
-% COORDINATED TURNS with a full-duration 0.5 s sensor loss placed INSIDE the
-% turn, so the filter must coast ~1 s open-loop along a curving path (CA
+% D1 STRESS SUITE  --  deliberately hard cases that expose the CA filter's two
+% admitted weaknesses: (i) high TARGET angular rate (close range x high
+% tangential speed, v/r approaching the loop bandwidth), and (ii) sustained
+% COORDINATED TURNS with a full-duration 0.5 s measurement loss placed INSIDE
+% the turn, so the filter must coast open-loop along a curving path (CA
 % extrapolates a parabola; a turn model follows the arc).  A sharp tangential
 % kick is added for the white-jerk stress.  Every case is still re-checked
-% against the Sec. V envelope (800-2000 m, <=150 m/s, <=20 m/s^2).
+% against the brief's envelope (800-2000 m, <=150 m/s, <=20 m/s^2).
 % =========================================================================
 function [X, Y, VX, VY, AX, AY, loss] = local_stress_traj(k, tg, P)
 rs = RandStream('mt19937ar', 'Seed', 9000 + k);
@@ -269,7 +304,7 @@ for attempt = 1:6000
             vx = vx + ax*h; vy = vy + ay*h; px = px + vx*h; py = py + vy*h;
         end
     end
-    if local_check(tg, X, Y, VX, VY, AX, AY, P, true)
+    if local_check(tg, X, Y, VX, VY, AX, AY, P)
         % loss(es): one full 0.5 s loss inside the first turn's CONSTANT-omega plateau
         % (forces ~1 s open-loop coast along a curving arc), 50% chance of a second
         t1 = W(1,1) + 0.5*W(1,2);  t1 = min(max(t1,1.0), 9.0);   % plateau centre

@@ -1,25 +1,44 @@
 function [V_m, fire_cmd, dbg] = turret_controller(t, r_meas, theta_meas, meas_valid, theta_turret, theta_dot_turret) %#ok<INUSD>
-%TURRET_CONTROLLER  Predictive tracking controller for the elevation mount.
+%TURRET_CONTROLLER  Predictive-feedback controller for the turret elevation axis.
 %
-%   Data flow (Sec. 7):  polar measurement -> target-state estimator (Cartesian)
-%     -> tp = 0.5 s prediction -> theta_ref = atan2(y_pred, x_pred) (clamped)
-%     -> LTI compensator (+/- 2-DOF feedforward, saturation, anti-windup)
-%     -> V_m, plus single-sample fire_cmd logic with a 1 s refractory period.
+%   Implements the architecture of the brief (Sec. 4, Fig. 2) as a single LTI
+%   design:
 %
-%   The estimator, compensator and acquisition mode are selected by turret_params:
-%     P.est  = 'CA' (baseline) | 'adaptQ' (NIS-adaptive jerk PSD) | 'IMM' (CV/CA/CT)
-%     P.ctrl = 'lag' (baseline) | 'pi' (ablation) | 'lagff' (lag + 2-DOF feedforward)
-%     P.acq  = 'linear' (baseline) | 'dualmode' (near-time-optimal slew + capture)
-%   With the default parameters the behaviour is IDENTICAL to the baseline design.
+%     radar (r, theta)  ->  target-state estimation   (6-state CA Kalman filter,
+%                           Cartesian, Joseph-form update, predict-only coasting
+%                           through a measurement-loss interval)
+%                       ->  target prediction         (fixed horizon Tp = 0.50 s,
+%                           x_pred = F(Tp) x, the same kinematic model)
+%                       ->  predicted elevation reference  theta_ref = atan2(y,x)
+%                           plus the closed-form theta_dot_ref, theta_ddot_ref
+%                       ->  feedback control          (two-degree-of-freedom LTI:
+%                           lag-matched Gc(s) = Kp/(1+s/p) on the pointing error,
+%                           plus the model-inverse feedforward V_ff, driven through
+%                           voltage saturation with exact back-calculation anti-windup
+%                           and a bounded dual-mode acquisition front-end)
+%                       ->  V_m  to the elevation drive
+%
+%   The pulse logic is separate: it issues a single-sample fire_cmd (one
+%   engagement pulse) on the rising edge of the command when the turret's
+%   *current* estimated beam-to-target perpendicular miss is inside fire_thr,
+%   the cross-beam uncertainty is inside fire_sig, at least t_recharge = 1.0 s has
+%   passed since the previous pulse, and the target lies in front of the turret.
+%
+%   The estimator, compensator and acquisition mode are selectable for the
+%   ablations only (turret_params); defaults are the finalized design:
+%     P.est  = 'CA' (final) | 'adaptQ' (NIS-adaptive jerk PSD) | 'IMM' (CV/CA/CT)
+%     P.ctrl = 'lagff' (final) | 'lag' (feedback only) | 'pi' (suggested PI)
+%     P.acq  = 'dualmode' (final) | 'linear' (LTI tracker throughout)
 %
 %   Persistent state (cleared with `clear turret_controller`; also re-initialised
-%   automatically if time ever decreases): estimator state/covariance (and, for
-%   IMM, the sub-filter bank + model probabilities), compensator state, last
-%   pulse time, previous fire_cmd.
+%   automatically if time ever decreases, i.e. a new run starts): estimator
+%   state/covariance (and, for IMM, the sub-filter bank + model probabilities),
+%   compensator state, last pulse time, previous fire_cmd.
 %
-%   The controller may be called at ANY rate (all discretisations use the actual
-%   elapsed time t - t_prev).  theta_dot_turret is part of the required interface
-%   but is not used by the final (single-loop) design.
+%   The controller may be called at ANY rate: all discretisations use the actual
+%   elapsed time t - t_prev.  theta_dot_turret is part of the mandated interface
+%   and is accepted here for fidelity, but the finalized single-loop design does
+%   not need it: the lag compensator acts on the pointing error alone.
 persistent S
 P = turret_params();
 if isempty(S) || t < S.t_prev - 1e-9
@@ -41,12 +60,12 @@ S.t_prev = t;
 %% --------------------------------------------- prediction -> elevation reference
 use_ff = strcmp(P.ctrl, 'lagff');
 if S.init
-    xp = local_est_predict(S, P.tp, P);           % ALWAYS the tp=0.5 s prediction (for metric/pulse-free)
-    h_aim = P.tp; if use_ff, h_aim = P.tp_ff; end  % aim horizon (FF supplies the lead otherwise from tp)
+    xp = local_est_predict(S, P.tp, P);           % ALWAYS the Tp = 0.5 s prediction (logged as the metric)
+    h_aim = P.tp; if use_ff, h_aim = P.tp_ff; end  % aim horizon (FF supplies the Tp lead itself)
     if abs(h_aim - P.tp) < 1e-12, xa = xp; else, xa = local_est_predict(S, h_aim, P); end
     [th_ref, thref_dot, thref_ddot] = local_refkin(xa);
     th_ref_u = th_ref;
-    th_ref = min(max(th_ref, P.th_min), P.th_max);        % mount limits
+    th_ref = min(max(th_ref, P.th_min), P.th_max);        % elevation limits
     if th_ref ~= th_ref_u, thref_dot = 0; thref_ddot = 0; end   % clamped -> no FF lead
 else
     xp = [NaN;NaN;NaN;NaN;NaN;NaN]; th_ref = theta_turret; thref_dot = 0; thref_ddot = 0;
@@ -105,7 +124,7 @@ end
 if S.fire_prev
     fire_cmd = 0; S.fire_prev = false;             % guarantee a clean rising edge
 elseif S.init && fwd > 0 && dperp <= P.fire_thr && sig_perp <= P.fire_sig ...
-        && (t - S.t_fire) >= P.t_refr - 1e-9
+        && (t - S.t_fire) >= P.t_recharge - 1e-9
     fire_cmd = 1; S.fire_prev = true; S.t_fire = t;
 end
 
