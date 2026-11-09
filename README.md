@@ -96,10 +96,11 @@ run_scenarios          % -> figures/fig_scenario_A.*, _B.*, _C.*, _C2.*, fig_cov
                        %    (Table III, Fig. 6 of the paper)
 run_final_evaluation   % -> figures/fig_final_eval*.*
                        %    results/final_eval.csv, final_eval_summary.txt
-                       %    (Fig. 8 of the paper; ~50 s for 40 cases)
+                       %    (Fig. 7 of the paper; ~50 s for 40 cases)
 run_headtohead         % -> results/headtohead.{csv,tex,mat}
-                       %    figures/fig_headtohead.* (paper Fig. 7) and fig_headtohead_full.*
-                       %    (Table IV of the paper; several minutes for 320 simulations)
+                       %    figures/fig_headtohead.* and fig_headtohead_full.*
+                       %    (Table IV of the paper; supplementary ablation figures;
+                       %     several minutes for 320 closed-loop simulations)
 run_rigor              % -> figures/fig_pcrlb.*, fig_consistency.*, fig_feedforward.*
                        %    results/rigor.txt (Fig. 5 of the paper)
 ```
