@@ -1,7 +1,9 @@
-%DESIGN_ANALYSIS  Plant derivation check, compensator design, Bode/margins, closed-loop
-%   analysis and anti-windup demonstration.  Reproduces Fig. 2-4 of the report and
-%   writes results/design_numbers.txt.     Requires Control System Toolbox.
+﻿%DESIGN_ANALYSIS  Plant derivation check, compensator design, Bode/margins, closed-loop
+%   analysis and anti-windup demonstration.  Reproduces the analysis figures of the
+%   paper and writes results/design_numbers.txt (every Bode/margin/step number quoted
+%   in Secs. III-IV).  Requires the Control System Toolbox.
 clear; close all; clc;
+paper_figure_style();
 clear turret_params; P = turret_params();
 root = fileparts(mfilename('fullpath'));
 figdir = fullfile(root,'figures'); resdir = fullfile(root,'results');
@@ -10,7 +12,7 @@ if ~isfolder(resdir), mkdir(resdir); end
 fid = fopen(fullfile(resdir,'design_numbers.txt'),'w');
 out = @(fmt, varargin) fprintf_both(fid, fmt, varargin{:});
 
-%% 1. Plant from first principles ------------------------------------------------
+%% 1. Turret plant from first principles -----------------------------------------
 s = tf('s');
 Jeq = P.J_turret + P.N^2*P.J_m;
 Gp  = P.N*P.Kt / ((Jeq*s^2 + P.b*s)*(P.Lm*s + P.Rm) + P.N^2*P.Kt*P.Ke*s);
@@ -19,16 +21,17 @@ A = [0 1 0; 0 -P.b/Jeq P.N*P.Kt/Jeq; 0 -P.Ke*P.N/P.Lm -P.Rm/P.Lm];
 B = [0; 0; 1/P.Lm];  Cm = [1 0 0];
 Gss = tf(ss(A,B,Cm,0));
 out('J_eq = %.1f kg m^2\n', Jeq);
-out('Gp(s) = %s\n', evalc('zpk(Gp)'));
+[zg, pg, kg] = zpkdata(Gp, 'v');
+out('Gp(s): zeros = [%s] , poles = [%s] , gain = %.6g\n', ...
+    strtrim(num2str(zg(:).', '%.4g ')), strtrim(num2str(pg(:).', '%.4g ')), kg);
 [num,den] = tfdata(Gp,'v'); k0 = num(end)/den(1);
-out('Gp(s) = %.4f / [ s ( s^2 + %.3f s + %.2f ) ]\n', num(end)/den(1), den(2)/den(1), den(3)/den(1));
+out('Gp(s) = %.4f / [ s ( s^2 + %.3f s + %.2f ) ]\n', k0, den(2)/den(1), den(3)/den(1));
 out('max |Gp - Gss| over 0.01..1e3 rad/s = %.2e\n', max(abs(squeeze(freqresp(Gp - Gss, logspace(-2,3,400))))));
 pl = pole(Gp);  wn = abs(pl(2));  zeta = -real(pl(2))/wn;
 out('poles: %s\n', mat2str(pl, 5));
 out('resonance wn = %.2f rad/s, zeta = %.4f\n', wn, zeta);
 Kdc = P.Kdc;  out('low-frequency velocity gain Kdc = N Kt/(N^2 Kt Ke + Rm b) = %.4e rad/s/V (=1/%.1f V s/rad)\n', Kdc, 1/Kdc);
 out('max slew rate at Vmax = %.1f V: %.4f rad/s = %.2f deg/s\n', P.Vmax, P.Vmax*Kdc, rad2deg(P.Vmax*Kdc));
-[~, ~] = deal(0);
 % peak open-loop plant gain at resonance
 out('|Gp(j wn)| = %.3e  (%.1f dB)\n', abs(freqresp(Gp, wn)), 20*log10(abs(freqresp(Gp, wn))));
 
@@ -64,7 +67,7 @@ end
 
 out('\nSUGGESTED PI  Gc = 1800(1+1/s): ');
 [Gm2,Pm2,Wg2,Wc2] = margin(Lpi);
-out('wc = %.3f rad/s, PM = %.2f deg, GM = %.2f dB at %.2f rad/s; type-2 -> ramp lag = 0 (mount LEADS the object by tp)\n', Wc2, Pm2, 20*log10(Gm2), Wg2);
+out('wc = %.3f rad/s, PM = %.2f deg, GM = %.2f dB at %.2f rad/s; type-2 -> ramp lag = 0 (turret LEADS the target by Tp)\n', Wc2, Pm2, 20*log10(Gm2), Wg2);
 sip = stepinfo(Tpi); out('  step: overshoot %.2f %%, settling %.3f s\n', sip.Overshoot, sip.SettlingTime);
 gdpi = -gradient(unwrap(angle(squeeze(freqresp(Tpi, wl)))), wl);
 out('  group delay of T_pi at 0.1 rad/s = %.4f s, at 0.5 rad/s = %.4f s\n', interp1(wl,gdpi,0.1), interp1(wl,gdpi,0.5));
@@ -79,7 +82,7 @@ semilogx(w, 20*log10(Mg), 'b', 'LineWidth', 1.6); hold on;
 semilogx(w, 20*log10(Mg2), 'Color', [0.85 0.33 0.1], 'LineStyle', '--', 'LineWidth', 1.2);
 yline(0, 'k:'); xline(Wc, 'k:'); xline(Wg, 'k:');
 plot(Wg, -20*log10(Gm), 'rv', 'MarkerFaceColor','r');
-text(Wg*1.1, -20*log10(Gm)+7, sprintf('GM = %.1f dB @ %.0f rad/s', 20*log10(Gm), Wg), 'FontSize', 8);
+text(Wg*1.15, 12, {sprintf('GM = %.1f dB', 20*log10(Gm)), sprintf('@ %.0f rad/s', Wg)}, 'FontSize', 8);
 text(0.04, 12, sprintf('\\omega_c = %.2f rad/s', Wc), 'FontSize', 8);
 ylabel('|L(j\omega)| [dB]'); grid on; legend('L = G_c G_p (final lag-matched)', 'PI (K_p=1800, T_i=1) [rejected]', 'Location','southwest','FontSize',7);
 ylim([-80 50]); title('Open-loop Bode diagram with stability margins');
@@ -88,10 +91,10 @@ semilogx(w, Ph, 'b', 'LineWidth', 1.6); hold on;
 semilogx(w, Ph2, 'Color', [0.85 0.33 0.1], 'LineStyle', '--', 'LineWidth', 1.2);
 yline(-180, 'k:'); xline(Wc, 'k:'); xline(Wg, 'k:');
 plot(Wc, Pm-180, 'rv', 'MarkerFaceColor','r');
-text(Wc*1.2, Pm-180-22, sprintf('PM = %.1f^\\circ', Pm), 'FontSize', 8);
+text(Wc*1.25, -165, sprintf('PM = %.1f^\\circ', Pm), 'FontSize', 8);
 ylabel('\angle L [deg]'); xlabel('\omega [rad/s]'); grid on; ylim([-300 -60]);
 linkaxes([ax1 ax2], 'x'); xlim([0.03 300]);
-exportgraphics(f1, fullfile(figdir,'fig_bode.png'), 'Resolution', 300); exportgraphics(f1, fullfile(figdir,'fig_bode.pdf'));
+exportgraphics(f1, fullfile(figdir,'fig_bode.png'), 'Resolution', 300, 'BackgroundColor', 'white'); exportgraphics(f1, fullfile(figdir,'fig_bode.pdf'), 'BackgroundColor', 'white');
 
 %% 4. Closed-loop step, lag-matching, sensitivity -------------------------------------------
 f2 = figure('Position',[100 100 900 300],'Visible','off');
@@ -105,12 +108,11 @@ semilogx(wl, gd, 'b', 'LineWidth', 1.6); hold on; semilogx(wl, gdpi, '--', 'Colo
 yline(P.tp, 'k:'); grid on; xlabel('\omega [rad/s]'); ylabel('group delay of T [s]'); ylim([-0.1 0.8]);
 title(sprintf('Loop lag vs t_p = %.1f s', P.tp));
 subplot(1,3,3);
-[Ms_, ~] = deal(0); %#ok<ASGLU>
 w = logspace(-2, 2.5, 600); Sm_ = squeeze(abs(freqresp(S, w))); Tm_ = squeeze(abs(freqresp(T, w)));
 semilogx(w, 20*log10(Tm_), 'b', 'LineWidth', 1.6); hold on; semilogx(w, 20*log10(Sm_), 'g', 'LineWidth', 1.2);
 xline(wn, 'k:'); grid on; ylim([-80 10]); xlabel('\omega [rad/s]'); ylabel('[dB]'); legend('|T|','|S|','Location','southwest','FontSize',7);
 title('Sensitivity and noise roll-off');
-exportgraphics(f2, fullfile(figdir,'fig_closedloop.png'), 'Resolution', 300); exportgraphics(f2, fullfile(figdir,'fig_closedloop.pdf'));
+exportgraphics(f2, fullfile(figdir,'fig_closedloop.png'), 'Resolution', 300, 'BackgroundColor', 'white'); exportgraphics(f2, fullfile(figdir,'fig_closedloop.pdf'), 'BackgroundColor', 'white');
 
 %% 5. Tracking of a manoeuvring angle: lag-matched loop vs delayed reference ------------------
 % reference: theta(t) with angular acceleration alpha; loop input = theta(t + tp); compare output with theta(t)
@@ -123,7 +125,7 @@ ey = y - thf(tt);
 out('\nTracking a parabolic angle (alpha = %.3f rad/s^2 = 20 m/s^2 at 800 m): steady error y(t)-theta(t) = %.3e rad (%.3f m at 800 m, %.3f m at 2000 m)\n', ...
     alpha, ey(end), abs(ey(end))*800, abs(ey(end))*2000);
 yp = lsim(Tpi, u, tt); eyp = yp - thf(tt);
-out('   same input with PI: error = %.3e rad (%.1f m at 800 m)  [mount leads]\n', eyp(end), abs(eyp(end))*800);
+out('   same input with PI: error = %.3e rad (%.1f m at 800 m)  [turret leads]\n', eyp(end), abs(eyp(end))*800);
 out('   first-order-lag-only (no p): residual alpha*tp^2/2 = %.3e rad\n', alpha*P.tp^2/2);
 
 %% 6. Saturation + anti-windup demonstration (nonlinear plant, 0.6 rad reference step) --------------------
@@ -147,7 +149,7 @@ yline(rad2deg(thref), 'k:'); grid on; xlabel('t [s]'); ylabel('\theta_{turret} [
 title('34.4^\circ reference step, nonlinear plant');
 subplot(1,2,2); plot(rec(:,1), rec(:,3), 'b', 'LineWidth', 1.5); hold on; plot(rec(:,1), rec(:,5), '--', 'Color', [0.85 0.33 0.1], 'LineWidth', 1.2);
 yline(P.Vmax, 'k:'); yline(-P.Vmax, 'k:'); grid on; xlabel('t [s]'); ylabel('V_m [V]'); title('Motor voltage (\pm240 V saturation)');
-exportgraphics(f3, fullfile(figdir,'fig_antiwindup.png'), 'Resolution', 300); exportgraphics(f3, fullfile(figdir,'fig_antiwindup.pdf'));
+exportgraphics(f3, fullfile(figdir,'fig_antiwindup.png'), 'Resolution', 300, 'BackgroundColor', 'white'); exportgraphics(f3, fullfile(figdir,'fig_antiwindup.pdf'), 'BackgroundColor', 'white');
 os_aw = (max(rec(:,2))/thref - 1)*100;  os_no = (max(rec(:,4))/thref - 1)*100;
 t98 = @(c) rec(find(abs(rec(:,c)-thref) > 0.02*thref, 1, 'last')+1, 1);
 out('\nSaturated 0.6 rad step: overshoot %.2f %% with anti-windup (2%% settle %.2f s) vs %.2f %% without (2%% settle %.2f s)\n', os_aw, t98(2), os_no, t98(4));

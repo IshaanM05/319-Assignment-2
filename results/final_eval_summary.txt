@@ -1,8 +1,9 @@
 FINAL EVALUATION: 40 randomized cases (seeds 101-140), ONE fixed design, no retuning
 Interception success rate: 40/40 = 100.0 %
-First-hit time: mean 2.632 s, median 2.756 s, std 1.187 s
+Interception time: mean 2.632 s, median 2.756 s, std 1.187 s
 Pulses/case: mean 7.53; successful-pulse fraction 98.3 %
 Max miss distance (post-acq): mean 1.72 m, 95th pct 2.83 m, max 7.36 m
+RMS miss distance (post-acq, buffered): mean 0.59 m, 95th pct 0.93 m
 RMS pos err: mean 0.74 m; RMS pred err: mean 3.68 m; RMS elos (post-acq): mean 0.0726 deg
 Acquisition time: mean 3.45 s, median 3.40 s, max 5.90 s
 Voltage saturation duty cycle: mean 22.8 %

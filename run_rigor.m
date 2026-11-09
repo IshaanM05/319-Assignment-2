@@ -1,8 +1,8 @@
-%RUN_RIGOR  Estimator-optimality and controller-feedforward rigor layer.
+﻿%RUN_RIGOR  Estimator-optimality and controller-feedforward rigor layer.
 %
 %   PART A -- Estimator near-optimality & consistency (A5 of the plan):
 %     * Posterior Cramer-Rao lower bound (PCRLB) for the position estimate along
-%       a representative maneuver-plus-loss trajectory, compared against the
+%       a representative manoeuvre-plus-loss trajectory, compared against the
 %       filter's Monte-Carlo RMS error.  For this linear/Gaussian converted-
 %       measurement problem the PCRLB equals the covariance recursion, so a
 %       filter RMS that tracks sqrt(PCRLB) demonstrates the CA filter is
@@ -20,6 +20,7 @@
 %   Writes figures/fig_pcrlb.{png,pdf}, figures/fig_consistency.{png,pdf},
 %   figures/fig_feedforward.{png,pdf}, results/rigor.txt
 clear; close all; clc;
+paper_figure_style();
 root = fileparts(mfilename('fullpath'));
 figdir = fullfile(root,'figures'); resdir = fullfile(root,'results');
 if ~isfolder(figdir), mkdir(figdir); end
@@ -29,7 +30,7 @@ fid = fopen(fullfile(resdir,'rigor.txt'),'w');
 
 %% ===================== PART A: PCRLB + NEES/NIS ==============================
 clear target_motion_generator
-sc = struct('stress', 3);                       % maneuver + 0.5 s loss inside a turn
+sc = struct('stress', 3);                       % manoeuvre + 0.5 s measurement loss inside a turn
 dtm = P.dt_meas;  tk = (0:dtm:10)';  K = numel(tk);
 % truth + measurement schedule (noise-free truth via 4th output; valid flag = sampling/loss)
 XT = zeros(K,6); valid = false(K,1);
@@ -102,7 +103,7 @@ fprintf(fid,'NIS in 95%% band: %.1f %% of valid steps.\n', pNIS);
 fprintf(fid,'Interpretation: the filter RMS tracks the PCRLB to within %.0f%% (ratio %.2f),\n', 100*abs(1-ratio), ratio);
 fprintf(fid,'i.e. the CA filter is near-optimal and slightly CONSERVATIVE (NEES just below 6,\n');
 fprintf(fid,'NIS just below 2 -- the q_jerk=200 choice deliberately over-bounds the error for\n');
-fprintf(fid,'robustness to unmodeled maneuvers).  Because it already extracts essentially all\n');
+fprintf(fid,'robustness to unmodelled manoeuvres).  Because it already extracts essentially all\n');
 fprintf(fid,'available information, the IMM / adaptive-Q variants have no estimation headroom to\n');
 fprintf(fid,'recover on this envelope/horizon -- the measurable gains are on the CONTROL side.\n\n');
 fprintf('PART A: RMS/sqrt(PCRLB)=%.3f  meanNEES=%.2f  meanNIS=%.2f  NIS-in-band=%.1f%%\n',ratio,mNEES,mNIS,pNIS);
@@ -115,49 +116,53 @@ d=diff([0; inloss; 0]); onsets=find(d==1); offsets=find(d==-1)-1;  % contiguous 
 for q=1:numel(onsets)
     patch(ax,[tk(onsets(q)) tk(offsets(q)) tk(offsets(q)) tk(onsets(q))],[yl(1) yl(1) yl(2) yl(2)],[1 .9 .9],'EdgeColor','none','HandleVisibility','off');
 end
-patch(ax,nan,nan,[1 .9 .9],'EdgeColor','none');  % single legend proxy for 'sensor loss'
+patch(ax,nan,nan,[1 .9 .9],'EdgeColor','none');  % single legend proxy for 'measurement loss'
 plot(ax,tk,Jpos,'k--','LineWidth',1.4);
 plot(ax,tk,rms_mc,'b-','LineWidth',1.2);
 xlabel(ax,'time [s]'); ylabel(ax,'position error [m]'); ylim(ax,yl);
-legend(ax,{'sensor loss','\surd PCRLB (bound)','filter RMS (MC)'},'Location','northwest','FontSize',8);
+legend(ax,{'measurement loss','\surd PCRLB (bound)','filter RMS (MC)'},'Location','northwest','FontSize',8);
 title(ax,sprintf('Estimator vs PCRLB  (RMS/bound = %.2f -> near-optimal)',ratio));
-exportgraphics(f1,fullfile(figdir,'fig_pcrlb.png'),'Resolution',200); exportgraphics(f1,fullfile(figdir,'fig_pcrlb.pdf'));
+exportgraphics(f1,fullfile(figdir,'fig_pcrlb.png'),'Resolution',200, 'BackgroundColor', 'white'); exportgraphics(f1,fullfile(figdir,'fig_pcrlb.pdf'), 'BackgroundColor', 'white');
 
 f2=figure('Position',[50 50 760 540],'Visible','off'); tiledlayout(2,1,'TileSpacing','compact','Padding','compact');
 nexttile; hold on; grid on;
 plot(tk(nz),nees_t(nz),'b.'); yline(lo6,'r--'); yline(hi6,'r--'); yline(nx,'k:');
 xlabel('time [s]'); ylabel('NEES');
-title(sprintf('6-state NEES: mean %.2f (n_x=6) -- conservative by design; maneuver spikes at t\\approx2.5 s',mNEES));
+title(sprintf('6-state NEES: mean %.2f (n_x=6) -- conservative by design; manoeuvre spikes at t\\approx2.5 s',mNEES));
 nexttile; hold on; grid on;
 plot(tk(vi),nis_t(vi),'b.'); yline(lo2,'r--'); yline(hi2,'r--'); yline(2,'k:');
 xlabel('time [s]'); ylabel('NIS');
 title(sprintf('2-D NIS: mean %.2f (2 dof), %.0f%% in 95%% band -- innovations consistent',mNIS,pNIS));
-exportgraphics(f2,fullfile(figdir,'fig_consistency.png'),'Resolution',200); exportgraphics(f2,fullfile(figdir,'fig_consistency.pdf'));
+exportgraphics(f2,fullfile(figdir,'fig_consistency.png'),'Resolution',200, 'BackgroundColor', 'white'); exportgraphics(f2,fullfile(figdir,'fig_consistency.pdf'), 'BackgroundColor', 'white');
 
 %% ===================== PART B: feedforward removes high-rate lag =============
-% Drive the elevation plant with a sinusoidal LOS angle of amplitude A and
-% frequency w; compare baseline (aim theta(t+tp), lag Gc) vs FF (aim theta(t),
-% lag Gc + V_ff = thetadot/Kdc).  True kinematics fed in (no estimator).
-% Peak LOS angular rate is held FIXED and well below the mount's saturated slew
-% rate (Vmax*Kdc = 0.239 rad/s), so this is a pure control-lag comparison, not a
-% physical-limit one.  Peak angular ACCELERATION = vref*w then rises with w, and
-% the baseline's residual lag grows with it while feedforward stays flat.
+% Drive the elevation plant with a sinusoidal line-of-sight angle of amplitude A
+% and frequency w; compare the feedback-only baseline (aim theta(t+Tp), lag Gc)
+% vs the 2-DOF design (aim theta(t), lag Gc + the model-inverse feedforward
+% V_ff = thetadot/Kdc + (Rm Jeq / N Kt) thetaddot).  True kinematics are fed in,
+% so this isolates the controller from the estimator.
+% The peak LOS angular RATE is held FIXED and well below the turret's saturated
+% slew rate (Vmax*Kdc = 0.239 rad/s), so this is a pure control-lag comparison,
+% not a physical-limit one.  The peak angular ACCELERATION = vref*w then rises
+% with w, and the baseline's residual lag grows with it while the feedforward
+% holds it flat.
 dt=1e-3; T=10; t=(0:dt:T)'; N=numel(t);
-vref=0.08; th0=deg2rad(40);                        % 0.08 rad/s peak LOS rate (33%% of slew limit)
+vref=0.08; th0=deg2rad(40);                        % 0.08 rad/s peak LOS rate (33% of slew limit)
 ws=[0.2 0.3 0.5 0.7 1.0 1.4 2.0];                  % rad/s LOS oscillation frequency
 rms_base=zeros(numel(ws),1); rms_ff=zeros(numel(ws),1); pk_base=rms_base; pk_ff=rms_ff;
 for iw=1:numel(ws)
     w=ws(iw); A=vref/w;
-    thref=@(tt) th0+A*sin(w*tt); thd=@(tt) vref*cos(w*tt);
-    [eb,~]=local_track(t,dt,thref,thd,P,false);
-    [ef,~]=local_track(t,dt,thref,thd,P,true);
+    thref=@(tt) th0+A*sin(w*tt); thd=@(tt) vref*cos(w*tt); thdd=@(tt) -vref*w*sin(w*tt);
+    [eb,~]=local_track(t,dt,thref,thd,thdd,P,false);
+    [ef,~]=local_track(t,dt,thref,thd,thdd,P,true);
     sel=t>T/2;                                     % steady portion
     rms_base(iw)=rad2deg(sqrt(mean(eb(sel).^2))); pk_base(iw)=rad2deg(max(abs(eb(sel))));
     rms_ff(iw)=rad2deg(sqrt(mean(ef(sel).^2)));   pk_ff(iw)=rad2deg(max(abs(ef(sel))));
 end
 % time trace at a representative rate
-wdemo=1.0; A=vref/wdemo; thref=@(tt) th0+A*sin(wdemo*tt); thd=@(tt) vref*cos(wdemo*tt);
-[eb,thb]=local_track(t,dt,thref,thd,P,false); [ef,thf]=local_track(t,dt,thref,thd,P,true);
+wdemo=1.0; A=vref/wdemo;
+thref=@(tt) th0+A*sin(wdemo*tt); thd=@(tt) vref*cos(wdemo*tt); thdd=@(tt) -vref*wdemo*sin(wdemo*tt);
+[eb,thb]=local_track(t,dt,thref,thd,thdd,P,false); [ef,thf]=local_track(t,dt,thref,thd,thdd,P,true);
 
 fprintf(fid,'=== PART B: 2-DOF feedforward vs baseline lag (controller-only) ===\n');
 for iw=1:numel(ws)
@@ -178,7 +183,7 @@ plot(t,rad2deg(eb),'LineWidth',1.1); plot(t,rad2deg(ef),'LineWidth',1.1);
 xlabel('time [s]'); ylabel('pointing error [deg]'); xlim([T/2 T]);
 legend({'baseline','feedforward'},'Location','northeast','FontSize',8);
 title(sprintf('Error trace at \\omega=%.1f rad/s',wdemo));
-exportgraphics(f3,fullfile(figdir,'fig_feedforward.png'),'Resolution',200); exportgraphics(f3,fullfile(figdir,'fig_feedforward.pdf'));
+exportgraphics(f3,fullfile(figdir,'fig_feedforward.png'),'Resolution',200, 'BackgroundColor', 'white'); exportgraphics(f3,fullfile(figdir,'fig_feedforward.pdf'), 'BackgroundColor', 'white');
 disp('run_rigor done.');
 
 % ======================================================================= locals
@@ -206,15 +211,17 @@ H=[eye(2) zeros(2,4)]; R=cov_at(z,P); nu=z-H*x; S=H*Pc*H'+R; K=(Pc*H')/S;
 x=x+K*nu; IKH=eye(6)-K*H; Pc=IKH*Pc*IKH'+K*R*K'; Pc=(Pc+Pc')/2;
 end
 
-function [err,thh]=local_track(t,dt,thref,thd,P,useff)
-% integrate the real nonlinear plant under baseline-lag or lag+feedforward
+function [err,thh]=local_track(t,dt,thref,thd,thdd,P,useff)
+% Integrate the nonlinear elevation drive under the feedback-only baseline or the
+% 2-DOF (lag feedback + model-inverse feedforward) design.
 X=[thref(0);0;0]; N=numel(t); err=zeros(N,1); thh=zeros(N,1); xf=0;
 for k=1:N
     tt=t(k); th=X(1);
-    if useff, aim=thref(tt); r_dot=thd(tt); else, aim=thref(tt+P.tp); r_dot=0; end
+    if useff, aim=thref(tt); r_dot=thd(tt); r_ddot=thdd(tt);
+    else, aim=thref(tt+P.tp); r_dot=0; r_ddot=0; end
     aim=min(max(aim,P.th_min),P.th_max);
     e=aim-th; a=1-exp(-P.p_eff*dt); xf=xf+a*(P.Kp_eff*e-xf);
-    Vff=0; if useff, Vff=P.kff_v*r_dot; end
+    Vff=0; if useff, Vff=P.kff_v*r_dot + P.kff_a*r_ddot; end
     V=min(max(xf+Vff,-P.Vmax),P.Vmax); xf=V-Vff;
     err(k)=thref(tt)-th; thh(k)=th;      % error vs the TRUE current LOS angle
     if k<N
