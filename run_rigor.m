@@ -1,13 +1,18 @@
-﻿%RUN_RIGOR  Estimator-optimality and controller-feedforward rigor layer.
+﻿%RUN_RIGOR  Estimator-consistency and controller-feedforward study.
 %
-%   PART A -- Estimator near-optimality & consistency (A5 of the plan):
-%     * Posterior Cramer-Rao lower bound (PCRLB) for the position estimate along
-%       a representative manoeuvre-plus-loss trajectory, compared against the
-%       filter's Monte-Carlo RMS error.  For this linear/Gaussian converted-
-%       measurement problem the PCRLB equals the covariance recursion, so a
-%       filter RMS that tracks sqrt(PCRLB) demonstrates the CA filter is
-%       essentially optimal -- which is WHY the IMM / adaptive-Q variants cannot
-%       meaningfully beat it (there is no estimation headroom to recover).
+%   PART A -- Estimator consistency:
+%     * Posterior Cramer-Rao recursion for the position estimate along a
+%       representative manoeuvre-plus-loss trajectory, compared against the
+%       filter's Monte-Carlo RMS error.  For the linear/Gaussian CA white-jerk
+%       model with converted measurements this recursion is a covariance
+%       recursion that uses the filter's OWN process noise (q_jerk) and
+%       measurement covariance.  The simulated manoeuvres are deterministic and
+%       q_jerk is deliberately conservative, so the recursion is the covariance
+%       the filter EXPECTS, not a lower bound on the simulated truth; a ratio
+%       below 1 is therefore possible and is NOT evidence of optimality.  It
+%       shows only that the error follows the model-based covariance.  The
+%       direct evidence for keeping the single CA model is the IMM / adaptive-Q
+%       ablation in run_headtohead.m.
 %     * NEES (6-state) and NIS (2-D innovation) chi-square consistency tests.
 %
 %   PART B -- the feedforward variant removes the high-rate tracking lag (B1):
@@ -96,17 +101,17 @@ lo2 = 2  - 1.96*sqrt(2*2 /M);  hi2 = 2  + 1.96*sqrt(2*2 /M);
 pNEES = 100*mean(nees_t(nz)>=lo6 & nees_t(nz)<=hi6);
 pNIS  = 100*mean(nis_t(vi)>=lo2 & nis_t(vi)<=hi2);
 mNEES = mean(nees_t(nz),'omitnan');  mNIS = mean(nis_t(vi),'omitnan');
-fprintf(fid,'=== PART A: estimator optimality & consistency (stress case 3, M=%d) ===\n',M);
-fprintf(fid,'Mean filter-RMS / sqrt(PCRLB) ratio (position): %.3f  (1.0 = optimal MMSE)\n', ratio);
+fprintf(fid,'=== PART A: estimator consistency (stress case 3, M=%d) ===\n',M);
+fprintf(fid,'Mean filter-RMS / sqrt(model-based covariance recursion) ratio (position): %.3f\n', ratio);
 fprintf(fid,'Mean NEES = %.2f (n_x=6);  mean NIS = %.2f (2 dof)\n', mNEES, mNIS);
 fprintf(fid,'NIS in 95%% band: %.1f %% of valid steps.\n', pNIS);
-fprintf(fid,'Interpretation: the filter RMS tracks the PCRLB to within %.0f%% (ratio %.2f),\n', 100*abs(1-ratio), ratio);
-fprintf(fid,'i.e. the CA filter is near-optimal and slightly CONSERVATIVE (NEES just below 6,\n');
-fprintf(fid,'NIS just below 2 -- the q_jerk=200 choice deliberately over-bounds the error for\n');
-fprintf(fid,'robustness to unmodelled manoeuvres).  Because it already extracts essentially all\n');
-fprintf(fid,'available information, the IMM / adaptive-Q variants have no estimation headroom to\n');
-fprintf(fid,'recover on this envelope/horizon -- the measurable gains are on the CONTROL side.\n\n');
-fprintf('PART A: RMS/sqrt(PCRLB)=%.3f  meanNEES=%.2f  meanNIS=%.2f  NIS-in-band=%.1f%%\n',ratio,mNEES,mNIS,pNIS);
+fprintf(fid,'Interpretation: the filter RMS follows the model-based covariance to within %.0f%% (ratio %.2f).\n', 100*abs(1-ratio), ratio);
+fprintf(fid,'The ratio is below 1 because the simulated manoeuvres are deterministic and q_jerk=200 is\n');
+fprintf(fid,'deliberately larger than they need, so the recursion is the covariance the filter expects,\n');
+fprintf(fid,'not a lower bound on the simulated truth.  NEES just below 6 and NIS just below 2 show the\n');
+fprintf(fid,'filter is consistent and slightly conservative.  This is NOT a proof of optimality; the\n');
+fprintf(fid,'direct evidence for the single CA model is the IMM / adaptive-Q ablation (run_headtohead.m).\n\n');
+fprintf('PART A: RMS/sqrt(model-based covariance)=%.3f  meanNEES=%.2f  meanNIS=%.2f  NIS-in-band=%.1f%%\n',ratio,mNEES,mNIS,pNIS);
 
 % ---- figures A
 f1=figure('Position',[50 50 760 320],'Visible','off');
@@ -120,8 +125,8 @@ patch(ax,nan,nan,[1 .9 .9],'EdgeColor','none');  % single legend proxy for 'meas
 plot(ax,tk,Jpos,'k--','LineWidth',1.4);
 plot(ax,tk,rms_mc,'b-','LineWidth',1.2);
 xlabel(ax,'time [s]'); ylabel(ax,'position error [m]'); ylim(ax,yl);
-legend(ax,{'measurement loss','\surd PCRLB (bound)','filter RMS (MC)'},'Location','northwest','FontSize',8);
-title(ax,sprintf('Estimator vs PCRLB  (RMS/bound = %.2f -> near-optimal)',ratio));
+legend(ax,{'measurement loss','\surd model-based covariance (PCRLB recursion)','filter RMS (MC)'},'Location','northwest','FontSize',8);
+title(ax,sprintf('Filter RMS vs model-based covariance  (ratio = %.2f)',ratio));
 exportgraphics(f1,fullfile(figdir,'fig_pcrlb.png'),'Resolution',200, 'BackgroundColor', 'white'); exportgraphics(f1,fullfile(figdir,'fig_pcrlb.pdf'), 'BackgroundColor', 'white');
 
 f2=figure('Position',[50 50 760 540],'Visible','off'); tiledlayout(2,1,'TileSpacing','compact','Padding','compact');

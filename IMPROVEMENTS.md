@@ -2,7 +2,7 @@
 
 This note documents the alternatives that were implemented and benchmarked against the
 finalized design, and what the numbers show — including the honest negative result that
-the estimator is already near-optimal, and the trade-off that led to the feedforward
+the extra estimators give no gain over the single CA filter, and the trade-off that led to the feedforward
 variant **not** being adopted. Everything here is reproducible from the repository
 (`run_headtohead.m`, `run_rigor.m`, `run_band_sweep.m`).
 
@@ -30,13 +30,18 @@ simulate_case('C', struct('est','IMM'))        % IMM estimator
   model probabilities.
 - **Adaptive-Q (NIS-triggered)** — implemented: a single CA filter that raises the jerk
   PSD when the normalized innovation squared exceeds a chi-square gate.
-- **PCRLB + NEES/NIS** (`run_rigor.m`, Part A) — implemented. On a maneuver-plus-loss
-  trajectory (Monte-Carlo M = 300): filter RMS = **0.945 x sqrt(PCRLB)** (near-optimal),
-  mean NIS = 1.87 (2 dof), mean NEES = 3.65 (n_x = 6, deliberately conservative).
+- **Covariance-recursion comparison + NEES/NIS** (`run_rigor.m`, Part A) — implemented.
+  On a maneuver-plus-loss trajectory (Monte-Carlo M = 300): filter RMS = **0.945 x the
+  square root of the model-based covariance recursion**, mean NIS = 1.87 (2 dof), mean
+  NEES = 3.65 (n_x = 6, deliberately conservative). The recursion is the posterior
+  Cramer-Rao recursion for the assumed CA white-jerk model, using the filter's own `q_jerk`.
+  The simulated maneuvers are deterministic and `q_jerk` is conservative, so it is the
+  covariance the filter *expects*, not a lower bound on the simulated truth, which is why
+  the ratio can be below 1. It shows consistency, not optimality.
 
-**Result.** Neither IMM nor adaptive-Q beats the single CA filter, and the PCRLB explains
-why: the CA filter is already within ~5% of the information floor, so there is no
-estimation headroom to recover. On the stress suite the IMM is clearly worse (RMS miss
+**Result.** Neither IMM nor adaptive-Q beats the single CA filter in the benchmark, and the
+CA filter's error follows its model-based covariance, so the simpler single-model
+estimator is kept. On the stress suite the IMM is clearly worse (RMS miss
 2.06 m vs 1.22 m, in-turn-loss prediction error 6.40 m vs 4.26 m).
 
 ## 2. Controller and acquisition

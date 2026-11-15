@@ -10,9 +10,10 @@ elevation reference, and a conventional LTI lag compensator `Gc(s) = Kp/(1+s/p)`
 tracks it. `Kp` and `p` are derived so the closed-loop group delay equals the prediction
 horizon (predictor lead and loop lag cancel, so the beam lies on the target's current
 line of sight when a pulse is issued). A bounded dual-mode acquisition front-end handles
-the initial slew. The estimator is *justified*, not assumed: a posterior Cramér–Rao
-bound analysis shows it is within ~5% of the information-theoretic floor, so IMM and
-adaptive-process-noise alternatives (both implemented) give no gain and are not adopted.
+the initial slew. The estimator choice is checked, not assumed: its Monte-Carlo error follows the posterior
+Cramér–Rao covariance recursion of its own model to within ~5% and it is statistically
+consistent (NEES/NIS); IMM and adaptive-process-noise alternatives (both implemented)
+give no gain and are not adopted.
 A model-inverse feedforward variant is also implemented and benchmarked, but is **not**
 the finalized design because it aims at the current estimate and so takes the prescribed
 prediction out of the control path. Full derivation, Bode/margin analysis, scenario
@@ -44,7 +45,7 @@ run_final_evaluation.m      Reproduces the 40-case evaluation table/figure
 run_headtohead.m            Ablation: baseline -> +dual-mode (final), feedforward variant, estimator swaps
 run_band_sweep.m            Sensitivity of the dual-mode hand-off band
 headtohead_figure.m         Draws the ablation figures from the saved head-to-head results
-run_rigor.m                 PCRLB optimality + NEES/NIS consistency + controller-only feedforward study
+run_rigor.m                 PCRLB-recursion comparison + NEES/NIS consistency + controller-only feedforward study
 paper_figure_style.m        Forces print-ready (white, black-text) MATLAB figures
 IMPROVEMENTS.md             Design study: research menu, what was built, findings
 figures/                    All generated .png/.pdf figures used in the paper
@@ -77,8 +78,8 @@ run_band_sweep      % -> results/band_sweep.txt
 acquisition: 100% on the 40 cases, 0.98 m mean RMS miss), the **dual-mode** front-end cuts
 the interception time from 2.87 s to 2.67 s and the RMS miss to **0.75 m** (-23%), with
 100% interception preserved on the 40 cases (stress suite: 23/24). Swapping the CA estimator for
-**adaptive-Q or IMM does not help** — the PCRLB shows CA is already within ~5% of the
-information bound — so the single-model CA filter is kept. The **feedforward variant**
+**adaptive-Q or IMM does not help** (benchmarked, no gain), and the CA filter's error follows
+its model-based covariance, so the single-model CA filter is kept. The **feedforward variant**
 (`lagff`) is more accurate (0.59 m / 0.89 m, 100% on both suites) but aims at the current
 estimate, so the Tp prediction no longer drives the turret; it is therefore reported as a
 comparison and not adopted.
@@ -135,7 +136,7 @@ pdflatex paper.tex   # second pass resolves cross-references
 | | |
 |---|---|
 | Plant | `Gp(s) = 3.125 / [s(s^2 + 10.47s + 3129.7)]`, type-1, `ωn = 55.94` rad/s, `ζ = 0.094` |
-| Estimator | 6-state CA Kalman filter, Cartesian, Joseph-form covariance, `qj = 200` m²/s⁵ (within ~5% of the PCRLB) |
+| Estimator | 6-state CA Kalman filter, Cartesian, Joseph-form covariance, `qj = 200` m²/s⁵ (error follows its model-based covariance; consistent by NEES/NIS) |
 | Prediction | `x_pred = F(Tp) x`, `Tp = 0.5` s (fixed), `θref = atan2(y_pred, x_pred)` |
 | Feedback | `Gc(s) = Kp/(1+s/p)`, `Kp = 2003` V/rad, `p = 4` rad/s — derived so the closed-loop group delay `= Tp` |
 | Acquisition | dual-mode: rate-limited slew, then a bumpless hand-off to the LTI tracker (band 2.5°) |
@@ -143,7 +144,7 @@ pdflatex paper.tex   # second pass resolves cross-references
 | Pulse logic | fire when `d⊥ ≤ 1.5` m and cross-beam `σ⊥ ≤ 1.0` m, `1.0` s recharge, current (not predicted) estimate |
 | Result | 100% on 3 scenarios and 40/40 randomized cases (23/24 stress), mean RMS miss 0.75 m, mean interception time 2.67 s, no retuning |
 
-See `paper/paper.pdf` Secs. III–VI for the full derivation, the PCRLB justification, and
+See `paper/paper.pdf` Secs. III–VI for the full derivation, the consistency check, and
 the ablation (including why the PI compensator, the IMM/adaptive-Q estimators and the
 feedforward variant were evaluated and not adopted).
 

@@ -1,13 +1,13 @@
-=== PART A: estimator optimality & consistency (stress case 3, M=300) ===
-Mean filter-RMS / sqrt(PCRLB) ratio (position): 0.945  (1.0 = optimal MMSE)
+=== PART A: estimator consistency (stress case 3, M=300) ===
+Mean filter-RMS / sqrt(model-based covariance recursion) ratio (position): 0.945
 Mean NEES = 3.65 (n_x=6);  mean NIS = 1.87 (2 dof)
 NIS in 95% band: 78.9 % of valid steps.
-Interpretation: the filter RMS tracks the PCRLB to within 5% (ratio 0.95),
-i.e. the CA filter is near-optimal and slightly CONSERVATIVE (NEES just below 6,
-NIS just below 2 -- the q_jerk=200 choice deliberately over-bounds the error for
-robustness to unmodelled manoeuvres).  Because it already extracts essentially all
-available information, the IMM / adaptive-Q variants have no estimation headroom to
-recover on this envelope/horizon -- the measurable gains are on the CONTROL side.
+Interpretation: the filter RMS follows the model-based covariance to within 5% (ratio 0.95).
+The ratio is below 1 because the simulated manoeuvres are deterministic and q_jerk=200 is
+deliberately larger than they need, so the recursion is the covariance the filter expects,
+not a lower bound on the simulated truth.  NEES just below 6 and NIS just below 2 show the
+filter is consistent and slightly conservative.  This is NOT a proof of optimality; the
+direct evidence for the single CA model is the IMM / adaptive-Q ablation (run_headtohead.m).
 
 === PART B: feedforward variant vs lag-only (controller-only) ===
   w=0.2 rad/s: RMS err baseline 0.0014 deg -> FF 0.0003 deg  (x5.0 better)
