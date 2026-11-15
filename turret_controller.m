@@ -10,10 +10,11 @@ function [V_m, fire_cmd, dbg] = turret_controller(t, r_meas, theta_meas, meas_va
 %                       ->  target prediction         (fixed horizon Tp = 0.50 s,
 %                           x_pred = F(Tp) x, the same kinematic model)
 %                       ->  predicted elevation reference  theta_ref = atan2(y,x)
-%                           plus the closed-form theta_dot_ref, theta_ddot_ref
-%                       ->  feedback control          (two-degree-of-freedom LTI:
-%                           lag-matched Gc(s) = Kp/(1+s/p) on the pointing error,
-%                           plus the model-inverse feedforward V_ff, driven through
+%                           (+ closed-form theta_dot_ref, theta_ddot_ref, used only by the 'lagff' ablation)
+%                       ->  feedback control          (conventional LTI lag compensator
+%                           Gc(s) = Kp/(1+s/p) on the error between the predicted
+%                           reference and the turret elevation, with Kp and p derived
+%                           so the closed-loop group delay equals Tp; driven through
 %                           voltage saturation with exact back-calculation anti-windup
 %                           and a bounded dual-mode acquisition front-end)
 %                       ->  V_m  to the elevation drive
@@ -27,7 +28,7 @@ function [V_m, fire_cmd, dbg] = turret_controller(t, r_meas, theta_meas, meas_va
 %   The estimator, compensator and acquisition mode are selectable for the
 %   ablations only (turret_params); defaults are the finalized design:
 %     P.est  = 'CA' (final) | 'adaptQ' (NIS-adaptive jerk PSD) | 'IMM' (CV/CA/CT)
-%     P.ctrl = 'lagff' (final) | 'lag' (feedback only) | 'pi' (suggested PI)
+%     P.ctrl = 'lag' (final) | 'lagff' (lag + feedforward, aims at the current estimate) | 'pi' (PI)
 %     P.acq  = 'dualmode' (final) | 'linear' (LTI tracker throughout)
 %
 %   Persistent state (cleared with `clear turret_controller`; also re-initialised
@@ -71,7 +72,7 @@ else
     xp = [NaN;NaN;NaN;NaN;NaN;NaN]; th_ref = theta_turret; thref_dot = 0; thref_ddot = 0;
 end
 
-%% --------------------------------- 2-DOF feedforward voltage (0 unless ctrl='lagff')
+%% --------------------------------- Feedforward voltage (ablation variant only: 0 unless ctrl='lagff')
 V_ff = 0;
 if use_ff && S.init
     V_ff = P.kff_v*thref_dot + P.kff_a*thref_ddot;
@@ -88,7 +89,7 @@ if S.init && strcmp(P.acq,'dualmode') && abs(e) > P.acq_band
     S.xi = 0;
 elseif ~S.init
     V_unsat = 0; V_m = 0;
-elseif strcmp(P.ctrl, 'pi')                       % ablation: suggested PI
+elseif strcmp(P.ctrl, 'pi')                       % ablation: PI compensator
     xi_new = S.xi + e*dt;
     V_unsat = P.Kp_pi*(e + xi_new/P.Ti_pi);
     V_m = min(max(V_unsat, -P.Vmax), P.Vmax);
@@ -96,7 +97,7 @@ elseif strcmp(P.ctrl, 'pi')                       % ablation: suggested PI
         xi_new = P.Ti_pi*(V_m/P.Kp_pi - e);
     end
     S.xi = xi_new;
-else                                              % 'lag' (baseline) or 'lagff' (lag + feedforward)
+else                                              % 'lag' (FINAL) or 'lagff' (ablation: lag + feedforward)
     a = 1 - exp(-P.p_eff*dt);                      % exact first-order discretisation
     xf = S.xf + a*(P.Kp_eff*e - S.xf);
     V_unsat = xf + V_ff;
@@ -104,7 +105,7 @@ else                                              % 'lag' (baseline) or 'lagff' 
     if use_ff
         S.xf = V_m - V_ff;                         % back-calculation anti-windup around the FF term
     else
-        S.xf = V_m;                                % baseline: state == output -> exact anti-windup
+        S.xf = V_m;                                % finalized: state == output -> exact anti-windup
     end
 end
 % never drive into a mechanical stop

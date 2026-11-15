@@ -23,7 +23,7 @@ FINAL  Gc(s) = Kp/(1+s/p), Kp = 2003.0 V/rad, p = 4.00 rad/s  (Kv = Kp*Kdc = 2.0
   w=0.50: |T - e^{-j w tp}| = 0.0026   (|T| = 0.9999, phase err = -0.15 deg)
   w=1.00: |T - e^{-j w tp}| = 0.0203   (|T| = 0.9940, phase err = -1.11 deg)
 
-SUGGESTED PI  Gc = 1800(1+1/s): wc = 2.010 rad/s, PM = 63.16 deg, GM = 15.28 dB at 55.85 rad/s; type-2 -> ramp lag = 0 (turret LEADS the target by Tp)
+PI COMPARISON  Gc = 1800(1+1/s): wc = 2.010 rad/s, PM = 63.16 deg, GM = 15.28 dB at 55.85 rad/s; type-2 -> ramp lag = 0 (turret LEADS the target by Tp)
   step: overshoot 22.20 %, settling 3.599 s
   group delay of T_pi at 0.1 rad/s = 0.0165 s, at 0.5 rad/s = 0.3482 s
 

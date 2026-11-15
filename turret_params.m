@@ -77,28 +77,35 @@ P.imm_TPM     = [0.95 0.025 0.025;    % CV
                  0.025 0.95 0.025;    % CA
                  0.025 0.025 0.95];   % CT   (row = from, col = to)
 % ---- feedback compensator -------------------------------------------------
-%   FINALIZED controller: 2-DOF LTI = lag-matched feedback + model-inverse
-%   feedforward.  The feedback is the conventional LTI compensator required by
-%   the brief; the feedforward is an LTI, analytically DERIVED (not tuned) path
-%   that holds the closed-loop group delay at Tp under angular acceleration.
-%   Ablations: 'lag' (feedback only), 'pi' (the brief's suggested PI).
-P.ctrl      = 'lagff';  % 'lagff' = lag feedback + 2-DOF feedforward (FINAL) | 'lag' | 'pi'
+%   FINALIZED controller: a conventional LTI lag compensator Gc(s) = Kp/(1+s/p)
+%   acting on the error between the PREDICTED elevation reference (Tp = 0.5 s
+%   ahead) and the turret elevation.  Kp and p are DERIVED (not tuned) so that the
+%   closed-loop group delay equals Tp: the predictor's lead and the loop's lag
+%   cancel, which puts the beam on the target's CURRENT line of sight when a pulse
+%   is issued.
+%   Alternatives, evaluated in the ablation only (never used by the finalized design):
+%     'lagff' : the same lag compensator plus an LTI model-inverse feedforward
+%               Vff.  This variant aims at the CURRENT estimate (tp_ff = 0), i.e. it
+%               bypasses the Tp prediction, so it is NOT the architecture required
+%               by the brief and is reported only as a comparison.
+%     'pi'    : a conventional PI compensator (type-2 loop), for comparison.
+P.ctrl      = 'lag';    % 'lag' = lag feedback on the Tp-predicted reference (FINAL) | 'lagff' | 'pi'
 P.tp_design = 0.50;     % s       group delay the loop is DESIGNED to have (= Tp)
-P.Kp_pi = 1800; P.Ti_pi = 1.0;   % suggested PI starting values (ablation only)
+P.Kp_pi = 1800; P.Ti_pi = 1.0;   % PI comparison values (ablation only)
 P.Kp_lag = []; P.p_lag = [];     % derived below unless explicitly overridden
-P.tp_ff  = 0.0;         % s       aim horizon used with the feedforward: the FF path
-                        %         supplies the Tp lead itself, so the feedback sees the
-                        %         current estimate; 'lag' alone aims at Tp
+P.tp_ff  = 0.0;         % s       aim horizon used ONLY by the 'lagff' ablation (the FF path
+                        %         is then driven by the current estimate); the finalized
+                        %         'lag' design always aims at the Tp = 0.5 s prediction
 % ---- acquisition front-end ------------------------------------------------
 %   FINALIZED: bounded dual-mode acquisition (rate-limited slew, then a bumpless
 %   hand-off to the LTI tracker).  The engagement-phase controller is the LTI
-%   2-DOF design above.  Ablation: 'linear' (LTI tracker throughout).
+%   lag design above.  Ablation: 'linear' (LTI tracker throughout).
 P.acq      = 'dualmode';% 'dualmode' (FINAL) | 'linear' (ablation)
 P.acq_band = deg2rad(2.5);   % rad  slew -> fine tracking hand-off band.
                              %   Chosen from the geometry of the saturated-rate unwind:
                              %   the mount leaves saturation at ~0.24 rad/s, and the
                              %   compensator's 1/p = 0.25 s relaxation covers ~3.4 deg,
-                             %   so a band below ~1.5 deg re-enters saturation and the
+                             %   so a band of 1.5 deg or less re-enters saturation and the
                              %   capture oscillates; 2.5 deg keeps the hand-off clean
                              %   while leaving the slew phase as short as possible.
 P.acq_Kp   = 20000;     % V/rad   slew-phase gain: always saturates -> rate-limited slew
@@ -115,7 +122,8 @@ P.Kdc  = P.N*P.Kt / (P.N^2*P.Kt*P.Ke + P.Rm*P.b);               % 9.985e-4
 P.Kp_eff = P.Kp_lag; P.p_eff = P.p_lag;
 if isempty(P.Kp_eff), P.Kp_eff = 1/(P.tp_design*P.Kdc); end     % 2003 V/rad
 if isempty(P.p_eff),  P.p_eff  = 2/P.tp_design;           end    % 4 rad/s
-% 2-DOF feedforward gains (model inverse, DERIVED not tuned):
+% Feedforward gains of the 'lagff' ABLATION variant (model inverse, DERIVED not tuned;
+% unused by the finalized 'lag' design):
 %   V_ff = thetadot_ref/Kdc  drives the turret at the reference's own angular
 %   rate (back-emf term); the acceleration term supplies the armature-resistance
 %   voltage needed to source the current for J_eq*thetaddot of torque.

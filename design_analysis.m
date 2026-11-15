@@ -37,7 +37,7 @@ out('|Gp(j wn)| = %.3e  (%.1f dB)\n', abs(freqresp(Gp, wn)), 20*log10(abs(freqre
 
 %% 2. Compensators ----------------------------------------------------------------
 Gc  = P.Kp_eff/(1 + s/P.p_eff);                    % FINAL
-Gpi = P.Kp_pi*(1 + 1/(P.Ti_pi*s));                 % suggested PI (for comparison)
+Gpi = P.Kp_pi*(1 + 1/(P.Ti_pi*s));                 % PI compensator (for comparison)
 L   = Gc*Gp;   Lpi = Gpi*Gp;
 T   = feedback(L,1);  S = 1/(1+L);   Tpi = feedback(Lpi,1);
 out('\nFINAL  Gc(s) = Kp/(1+s/p), Kp = %.1f V/rad, p = %.2f rad/s  (Kv = Kp*Kdc = %.4f 1/s = 1/tp)\n', P.Kp_eff, P.p_eff, P.Kp_eff*Kdc);
@@ -65,7 +65,7 @@ for q = 1:numel(wcmp)
     out('  w=%.2f: |T - e^{-j w tp}| = %.4f   (|T| = %.4f, phase err = %.2f deg)\n', wcmp(q), abs(Tj - dly), abs(Tj), rad2deg(angle(Tj/dly)));
 end
 
-out('\nSUGGESTED PI  Gc = 1800(1+1/s): ');
+out('\nPI COMPARISON  Gc = 1800(1+1/s): ');
 [Gm2,Pm2,Wg2,Wc2] = margin(Lpi);
 out('wc = %.3f rad/s, PM = %.2f deg, GM = %.2f dB at %.2f rad/s; type-2 -> ramp lag = 0 (turret LEADS the target by Tp)\n', Wc2, Pm2, 20*log10(Gm2), Wg2);
 sip = stepinfo(Tpi); out('  step: overshoot %.2f %%, settling %.3f s\n', sip.Overshoot, sip.SettlingTime);

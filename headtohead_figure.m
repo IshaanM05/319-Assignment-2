@@ -7,7 +7,7 @@
 %   figures can be redrawn from results/headtohead.mat without re-simulating.
 sS = 'Stress24';  sO = 'Orig40';
 getv = @(S,fn) cellfun(@(r) r.(fn), R.(S));
-barlab = {'Base','+FF','Final','aQ','IMM'};
+barlab = {'Base','Final','FF*','aQ','IMM'};   % FF* = feedforward variant (not adopted)
 ns = numel(suite_names);
 
 % ---- compact two-panel version (paper figure) ------------------------------
@@ -19,10 +19,10 @@ for q = 1:ns
     th(:,q) = getv(suite_fields{q},'first_hit');
 end
 nexttile; bar(ms); grid on; set(gca,'xticklabel',barlab,'FontSize',7);
-ylabel('RMS miss [m]'); title('Engagement accuracy'); ylim([0 1.6]);
+ylabel('RMS miss [m]'); title('Engagement accuracy'); ylim([0 2.3]);
 legend(suite_names,'Location','northwest','FontSize',7);
 nexttile; bar(th); grid on; set(gca,'xticklabel',barlab,'FontSize',7);
-ylabel('interception time [s]'); title('Interception time'); ylim([0 4.4]);
+ylabel('interception time [s]'); title('Interception time'); ylim([0 4.8]);
 exportgraphics(f, fullfile(figdir,'fig_headtohead.png'), 'Resolution', 300, 'BackgroundColor', 'white');
 exportgraphics(f, fullfile(figdir,'fig_headtohead.pdf'), 'BackgroundColor', 'white');
 close(f);

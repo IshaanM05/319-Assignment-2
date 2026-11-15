@@ -20,7 +20,7 @@
 \maketitle
 
 \begin{abstract}
-We design and evaluate the predictive-feedback control system of a Guardian point-defense turret engaging a maneuvering V-44 aerial target. From noisy polar radar returns (range and elevation angle) at 20~Hz, the system estimates the target state, predicts it $T_p=0.5$~s ahead, forms the corresponding future elevation reference, and drives the turret's elevation axis through a conventional LTI compensator. The finalized design couples a constant-acceleration Kalman filter in Cartesian coordinates, the fixed-horizon prediction, and a two-degree-of-freedom controller: a lag-matched feedback compensator whose pole is \emph{derived} so that the closed-loop group delay equals the prediction horizon, plus a model-inverse feedforward term that holds this delay accurate under angular acceleration. A bounded dual-mode front-end makes acquisition of the rate-limited turret near-time-optimal. The estimator is not assumed but \emph{justified}: a posterior Cram\'er--Rao bound analysis shows it operates within $5\%$ of the information-theoretic floor, so interacting-multiple-model and adaptive-process-noise alternatives---both implemented and benchmarked---yield no estimation gain and are deliberately not adopted. One finalized design, never retuned, achieves $100\%$ interception across the three standardized scenarios and 40 randomized bounded maneuvers with randomized measurement-loss intervals, with a mean post-acquisition RMS miss distance of $0.59$~m and a mean interception time of $2.63$~s; an ablation isolates the feedforward (up to $80\times$ lower high-rate pointing error) and dual-mode contributions.
+We design and evaluate the predictive-feedback control system of a Guardian point-defense turret engaging a maneuvering V-44 aerial target. From noisy polar radar returns (range and elevation angle) at 20~Hz, the system estimates the target state, predicts it $T_p=0.5$~s ahead, forms the corresponding future elevation reference, and drives the turret's elevation axis through a conventional LTI compensator. The finalized design couples a constant-acceleration Kalman filter in Cartesian coordinates, the fixed-horizon prediction, and a conventional LTI lag compensator that tracks the predicted elevation reference; its gain and pole are \emph{derived} so that the closed-loop group delay equals the prediction horizon. A bounded dual-mode front-end makes acquisition of the rate-limited turret near-time-optimal. The estimator is not assumed but \emph{justified}: a posterior Cram\'er--Rao bound analysis shows it operates within $5\%$ of the information-theoretic floor, so interacting-multiple-model and adaptive-process-noise alternatives---both implemented and benchmarked---yield no estimation gain and are deliberately not adopted. One finalized design, never retuned, achieves $100\%$ interception across the three standardized scenarios and 40 randomized bounded maneuvers with randomized measurement-loss intervals, with a mean post-acquisition RMS miss distance of $0.75$~m and a mean interception time of $2.67$~s; on a harder 24-case stress suite it intercepts $23$ of $24$. An ablation isolates the dual-mode contribution and shows why a model-inverse feedforward variant, which is more accurate but bypasses the prediction stage, is not adopted.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -36,10 +36,10 @@ The design exercise is posed in the fictional setting of a Guardian point-defens
 
 \textbf{Assumptions.} Target motion is smooth and admissible inside the prescribed envelope ($800$--$2000$~m range, $\le150$~m/s speed, $\le20$~m/s$^2$ acceleration); the radar is co-located with the turret and may drop out for at most $0.5$~s, no earlier than $t=1$~s; the elevation drive is rigid and linear apart from the voltage saturation and the mechanical stops; the pulse is short compared with the turret dynamics, so the turret angle is constant during a pulse.
 
-\textbf{Approach and contributions.} The finalized design (Fig.~\ref{fig:block}) is a constant-acceleration (CA) Kalman filter feeding a $0.5$~s prediction and a \emph{two-degree-of-freedom} (2-DOF) LTI controller. Its design is governed throughout by analysis rather than tuning: (a) the feedback pole is derived so the closed-loop group delay equals $T_p$ (Sec.~\ref{sec:fb}); (b) a model-inverse feedforward term, also derived from the plant, keeps that delay accurate as the angular rate changes, removing the lag match's one small-signal limitation (Sec.~\ref{sec:ff}); (c) the estimator is shown near-optimal against the posterior Cram\'er--Rao bound, which rigorously justifies the single-model CA choice over interacting-multiple-model (IMM) and adaptive alternatives that we implement and find give no gain (Sec.~\ref{sec:opt}); and (d) a bounded dual-mode front-end makes acquisition near-time-optimal for a turret that is slew-rate limited (Sec.~\ref{sec:acq}). An ablation (Sec.~\ref{sec:final}) isolates each element's contribution.
+\textbf{Approach and contributions.} The finalized design (Fig.~\ref{fig:block}) is a constant-acceleration (CA) Kalman filter feeding a $0.5$~s prediction, whose predicted elevation reference is tracked by a conventional LTI lag compensator. Its design is governed throughout by analysis rather than tuning: (a) the compensator gain and pole are derived so the closed-loop group delay equals $T_p$, so the predictor's lead and the loop's lag cancel and the beam lies on the target's current line of sight when a pulse is issued (Sec.~\ref{sec:fb}); (b) the estimator is shown near-optimal against the posterior Cram\'er--Rao bound, which rigorously justifies the single-model CA choice over interacting-multiple-model (IMM) and adaptive alternatives that we implement and find give no gain (Sec.~\ref{sec:opt}); and (c) a bounded dual-mode front-end makes acquisition near-time-optimal for a turret that is slew-rate limited (Sec.~\ref{sec:acq}). A model-inverse feedforward variant is also analyzed (Sec.~\ref{sec:ff}) and benchmarked, but is not adopted because it would bypass the prediction stage the architecture requires. An ablation (Sec.~\ref{sec:final}) isolates each element's contribution.
 
 \section{System Architecture and Design}\label{sec:arch}
-Fig.~\ref{fig:schem} shows the physical layout in the elevation plane and Fig.~\ref{fig:block} the signal flow. The co-located radar measures the slant range $r$ and the elevation angle $\theta_{\mathrm{LOS}}$ of the target relative to the turret at 20~Hz. Each measurement is converted to Cartesian form and fused into a 6-state CA Kalman filter; the filter state is propagated $T_p=0.5$~s forward, and the predicted position is mapped to the predicted elevation reference $\theta_{\mathrm{ref}}$ together with its first two time derivatives. A 2-DOF controller drives the motor voltage $V_m$: a lag-matched feedback compensator $G_c(s)$ acting on the pointing error, plus a feedforward voltage $V_{\mathrm{ff}}$ formed from the reference's angular rate and acceleration; the sum passes through voltage saturation and anti-windup. A bounded dual-mode supervisor commands a maximum-rate slew during initial acquisition and hands off to the LTI tracker once the error is small. A separate pulse-logic block fires discrete engagement pulses using the filter's \emph{current} (unpredicted) estimate, because a pulse is effectively instantaneous.
+Fig.~\ref{fig:schem} shows the physical layout in the elevation plane and Fig.~\ref{fig:block} the signal flow. The co-located radar measures the slant range $r$ and the elevation angle $\theta_{\mathrm{LOS}}$ of the target relative to the turret at 20~Hz. Each measurement is converted to Cartesian form and fused into a 6-state CA Kalman filter; the filter state is propagated $T_p=0.5$~s forward, and the predicted position is mapped to the predicted elevation reference $\theta_{\mathrm{ref}}$. A feedback controller drives the motor voltage $V_m$: a lag-matched LTI compensator $G_c(s)$ acts on the error between the predicted reference $\theta_{\mathrm{ref}}$ and the turret elevation $\theta_t$, and its output passes through voltage saturation and anti-windup. A bounded dual-mode supervisor commands a maximum-rate slew during initial acquisition and hands off to the LTI tracker once the error is small. A separate pulse-logic block fires discrete engagement pulses using the filter's \emph{current} (unpredicted) estimate, because a pulse is effectively instantaneous.
 
 \begin{figure}[t]
 \centering
@@ -96,37 +96,27 @@ Fig.~\ref{fig:schem} shows the physical layout in the elevation plane and Fig.~\
 \node[box] (sens) at (0.50,3.55) {Radar\\$r,\theta$};
 \node[box] (kf)   at (2.25,3.55) {CA Kalman\\filter};
 \node[box] (pred) at (4.00,3.55) {Predict\\$T_p$};
-\node[box] (ref)  at (5.75,3.55) {$\theta_{\mathrm{ref}}$\\$\dot\theta_{\mathrm{ref}}$};
+\node[box] (ref)  at (5.75,3.55) {Predicted\\$\theta_{\mathrm{ref}}$};
 % ---- bottom row (right to left)
 \node[sum] (s1)    at (5.75,0.95) {};
-\node[box] (gc)    at (4.00,0.95) {$G_c(s)$};
-\node[sum] (s2)    at (2.25,0.95) {};
-\node[box] (sat)   at (0.50,0.95) {Saturation\\+ dual mode};
-\node[box] (plant) at (-1.35,0.95) {Elevation\\drive $G_p(s)$};
-% ---- feedforward path
-\node[box] (ff) at (2.25,2.30) {Feedforward\\$V_{\mathrm{ff}}$};
+\node[box] (gc)    at (3.60,0.95) {$G_c(s)$};
+\node[box] (sat)   at (1.30,0.95) {Saturation\\+ dual mode};
+\node[box] (plant) at (-1.00,0.95) {Elevation\\drive $G_p(s)$};
 % ---- summing-junction signs
 \node[font=\scriptsize, anchor=east] at (5.62,1.20) {$+$};
 \node[font=\scriptsize, anchor=east] at (5.54,0.72) {$-$};
-\node[font=\scriptsize, anchor=west] at (2.53,1.10) {$+$};
-\node[font=\scriptsize, anchor=east] at (2.12,1.20) {$+$};
 % ---- signal paths
 \draw[arr] (sens) -- (kf);
 \draw[arr] (kf) -- (pred);
 \draw[arr] (pred) -- (ref);
 \draw[arr] (ref) -- (s1);
-\coordinate (tap) at (5.75,2.30);
-\fill (tap) circle (0.03);
-\draw[arr] (tap) -- (ff.east);
-\draw[arr] (ff) -- (s2);
 \draw[arr] (s1) -- (gc);
-\draw[arr] (gc) -- (s2);
-\draw[arr] (s2) -- (sat);
+\draw[arr] (gc) -- (sat);
 \draw[arr] (sat) -- (plant);
 \draw[arr] (plant.south) -- ++(0,-0.72) -| (s1.south);
-\node[font=\scriptsize, anchor=south] at (-1.35,0.10) {$\theta_t$};
+\node[font=\scriptsize, anchor=south] at (-1.00,0.10) {$\theta_t$};
 \end{tikzpicture}
-\caption{Finalized architecture: radar $\to$ CA estimator $\to$ $T_p=0.5$~s prediction $\to$ predicted elevation reference $\to$ 2-DOF controller (lag-matched feedback $G_c$ \emph{plus} model-inverse feedforward $V_{\mathrm{ff}}$) with a bounded dual-mode acquisition front-end, voltage saturation and anti-windup, driving the elevation drive. The discrete pulse logic ($\hat x,\hat y,\theta_t\mapsto$\texttt{fire\_cmd}, with $t_{\mathrm{recharge}}=1$~s) is omitted for clarity.}
+\caption{Finalized architecture: radar $\to$ CA estimator $\to$ $T_p=0.5$~s prediction $\to$ predicted elevation reference $\to$ lag-matched feedback compensator $G_c(s)$ with a bounded dual-mode acquisition front-end, voltage saturation and anti-windup $\to$ elevation drive, closed by the turret elevation $\theta_t$. The discrete pulse logic ($\hat x,\hat y,\theta_t\mapsto$\texttt{fire\_cmd}, with $t_{\mathrm{recharge}}=1$~s) is omitted for clarity.}
 \label{fig:block}
 \end{figure}
 
@@ -175,11 +165,10 @@ the covariance update being written in numerically robust Joseph form. During a 
 \subsection{Target prediction and elevation-reference generation}\label{sec:pred}
 At every controller sample the state is propagated the fixed horizon $T_p=0.5$~s with the same CA transition, $\mathbf{x}_{\mathrm{pred}}=F(T_p)\mathbf{x}$, and the predicted position is mapped to the predicted elevation reference and its derivatives:
 \begin{equation}
-\theta_{\mathrm{ref}}=\mathrm{clamp}\big(\mathrm{atan2}(\hat y,\hat x),-10^\circ,85^\circ\big),\qquad
-\dot\theta_{\mathrm{ref}}=\frac{\hat x\dot{\hat y}-\hat y\dot{\hat x}}{\hat x^2+\hat y^2},
+\theta_{\mathrm{ref}}=\mathrm{clamp}\big(\mathrm{atan2}(\hat y_p,\hat x_p),-10^\circ,85^\circ\big),
 \label{eq:ref}
 \end{equation}
-with $\ddot\theta_{\mathrm{ref}}$ obtained in closed form from the same expression differentiated once more. Using the same kinematic model for prediction and estimation keeps the pipeline consistent and tuning-free. Both $\theta_{\mathrm{ref}}$ (for the feedback) and its derivatives (for the feedforward of Sec.~\ref{sec:ff}) are supplied to the controller.
+where $(\hat x_p,\hat y_p)$ are the position components of $\mathbf{x}_{\mathrm{pred}}$. Using the same kinematic model for prediction and estimation keeps the pipeline consistent and tuning-free. The feedback controller of Sec.~\ref{sec:fb} tracks $\theta_{\mathrm{ref}}$. (Its time derivatives follow in closed form from the predicted state and are needed only by the feedforward variant of Sec.~\ref{sec:ff}.)
 
 \subsection{Closed-loop model}\label{sec:cl}
 With $L(s)=G_c(s)G_p(s)$ the loop transfer function, the closed-loop tracking and sensitivity functions used for all the linear analysis are
@@ -203,11 +192,11 @@ p&=\frac{2}{T_p}=4\ \mathrm{rad/s}.
 \end{equation}
 chosen so that the velocity constant $K_v=K_pK_{\mathrm{dc}}=1/T_p$ makes the type-1 loop's ramp-following lag exactly $T_p$, and so the real pole $p\ll\omega_n$ gives an approximately constant group delay over the loop bandwidth.
 
-We prefer this to the suggested PI: the PI produces a type-2 loop with \emph{zero} ramp lag, which, combined with the predictor, \emph{leads} the target by $T_p$ ($0.14$~rad $=111$~m at $800$~m in a parabolic-angle test, versus $0.03$~m for the lag), and its gain-margin frequency sits on the plant resonance $\omega_n=55.9$~rad/s (Table~\ref{tab:gc}). The lag's extra roll-off pushes its gain-margin frequency to $29.4$~rad/s with $38$~dB of margin, a robust buffer for unseen cases.
+We prefer this to a conventional PI compensator: the PI produces a type-2 loop with \emph{zero} ramp lag, which, combined with the predictor, \emph{leads} the target by $T_p$ ($0.14$~rad $=111$~m at $800$~m in a parabolic-angle test, versus $0.03$~m for the lag), and its gain-margin frequency sits on the plant resonance $\omega_n=55.9$~rad/s (Table~\ref{tab:gc}). The lag's extra roll-off pushes its gain-margin frequency to $29.4$~rad/s with $38$~dB of margin, a robust buffer for unseen cases.
 
 \begin{table}[t]
 \centering\footnotesize
-\caption{Lag-matched feedback compensator vs.\ the suggested PI}
+\caption{Lag-matched feedback compensator vs.\ a PI compensator}
 \label{tab:gc}
 \begin{tabular}{@{}lcc@{}}
 \toprule
@@ -223,7 +212,7 @@ Parabolic-angle error & 0.03 m @ 800 m & 111 m (\emph{leads}) \\
 \end{table}
 
 \subsection{Bode analysis and margins}\label{sec:bode}
-Fig.~\ref{fig:bode} shows $L(j\omega)=G_c(j\omega)G_p(j\omega)$: crossover $\omega_c=1.82$~rad/s, phase margin $65.2^\circ$, gain margin $38.0$~dB at $29.4$~rad/s --- inside the target band ($\mathrm{PM}\approx60^\circ$, $\mathrm{GM}\approx12$--$15$~dB) with margin for unmodelled dynamics, and $\omega_c$ is $31\times$ below $\omega_n$, so the lightly damped mode is never excited. The dominant closed-loop poles are $-1.99\pm j2.01$; the $-3$~dB bandwidth is $2.85$~rad/s and the peak sensitivity $M_s=1.28$. The loop's group delay equals $T_p=0.500$~s as $\omega\to0$ and stays within $11\%$ of $T_p$ up to $1$~rad/s, which covers the worst-case target angular rate $v_{\max}/r_{\min}=0.19$~rad/s. The compensator also attenuates the plant resonance by $-37$~dB and reduces white reference noise over the $20$~Hz measurement bandwidth to $0.225\times$ ($-13$~dB), which is why the estimator's residual noise does not appear as turret jitter.
+Fig.~\ref{fig:bode} shows $L(j\omega)=G_c(j\omega)G_p(j\omega)$: crossover $\omega_c=1.82$~rad/s, phase margin $65.2^\circ$, gain margin $38.0$~dB at $29.4$~rad/s --- above the usual design targets ($\mathrm{PM}\gtrsim45^\circ$, $\mathrm{GM}\gtrsim6$~dB) with margin for unmodelled dynamics, and $\omega_c$ is $31\times$ below $\omega_n$, so the lightly damped mode is never excited. The dominant closed-loop poles are $-1.99\pm j2.01$; the $-3$~dB bandwidth is $2.85$~rad/s and the peak sensitivity $M_s=1.28$. The loop's group delay equals $T_p=0.500$~s as $\omega\to0$ and stays within $11\%$ of $T_p$ up to $1$~rad/s, which covers the worst-case target angular rate $v_{\max}/r_{\min}=0.19$~rad/s. The compensator also attenuates the plant resonance by $-37$~dB and reduces white reference noise over the $20$~Hz measurement bandwidth to $0.225\times$ ($-13$~dB), which is why the estimator's residual noise does not appear as turret jitter.
 
 \begin{figure}[t]
 \centering
@@ -232,25 +221,18 @@ Fig.~\ref{fig:bode} shows $L(j\omega)=G_c(j\omega)G_p(j\omega)$: crossover $\ome
 \label{fig:bode}
 \end{figure}
 
-\subsection{2-DOF feedforward: holding the delay accurate}\label{sec:ff}
-The lag match is a small-signal result: the loop's group delay equals $T_p$ exactly only as $\omega\to0$ and drifts as the angular rate \emph{changes}, so the lead/lag cancellation --- and hence the pointing accuracy --- degrades with angular \emph{acceleration}. We remove this dependence with a second degree of freedom. Because the plant velocity gain is $K_{\mathrm{dc}}$, the voltage that drives the turret at the reference's own angular rate, plus the armature-resistance voltage needed to source the current for $J_{\mathrm{eq}}\ddot\theta_{\mathrm{ref}}$ of torque, is the model inverse
+\subsection{Limit of the lag match and a feedforward variant}\label{sec:ff}
+The lag match is a small-signal result: the loop's group delay equals $T_p$ exactly only as $\omega\to0$ and drifts as the angular rate \emph{changes}, so the lead/lag cancellation degrades with angular \emph{acceleration}. A second degree of freedom can remove this dependence. Because the plant velocity gain is $K_{\mathrm{dc}}$, the voltage that drives the turret at a reference's own angular rate, plus the armature-resistance voltage needed to source the current for $J_{\mathrm{eq}}\ddot\theta$ of torque, is the model inverse
 \begin{equation}
-V_{\mathrm{ff}}=\frac{\dot\theta_{\mathrm{ref}}}{K_{\mathrm{dc}}}+\frac{R_mJ_{\mathrm{eq}}}{NK_t}\,\ddot\theta_{\mathrm{ref}},
+V_{\mathrm{ff}}=\frac{\dot\theta_{\mathrm{aim}}}{K_{\mathrm{dc}}}+\frac{R_mJ_{\mathrm{eq}}}{NK_t}\,\ddot\theta_{\mathrm{aim}}.
 \label{eq:ff}
 \end{equation}
-with $\dot\theta_{\mathrm{ref}},\ddot\theta_{\mathrm{ref}}$ from Eq.~\eqref{eq:ref}. The gains are \emph{derived}, not tuned, and the path is LTI, so the loop stays a conventional LTI compensator and the margins of Sec.~\ref{sec:bode} are unchanged (feedforward is an open-loop additive path). Its effect is to hold the turret on the current LOS even while the angular rate changes: equivalently, it keeps the net group delay at $T_p$ accurate beyond the small-signal regime. Fig.~\ref{fig:ff} drives the loop with a sinusoidal LOS of fixed peak rate (unsaturated) and increasing frequency, isolating the controller from estimation: the feedback-only pointing error grows with angular acceleration while the 2-DOF error stays flat --- up to $80\times$ smaller at the highest rate tested.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\linewidth]{../figures/fig_feedforward.pdf}
-\caption{Controller-only test (true kinematics fed in; peak LOS rate fixed at $0.08$~rad/s, unsaturated). Left: steady RMS pointing error vs LOS frequency --- feedback-only grows with angular acceleration, 2-DOF stays flat. Right: error trace at $\omega=1$~rad/s.}
-\label{fig:ff}
-\end{figure}
+It is LTI, its gains are derived rather than tuned, and, being an additive open-loop path, it leaves the margins of Sec.~\ref{sec:bode} unchanged. A controller-only test (\texttt{run\_rigor.m}, \texttt{figures/fig\_feedforward}) drives the loop with a sinusoidal LOS of fixed peak rate $0.08$~rad/s (unsaturated) and increasing frequency, isolating the controller from estimation: the lag-only error grows with angular acceleration while the feedforward error stays flat, up to $80\times$ smaller at $\omega=2$~rad/s. The feedforward can, however, cancel the loop delay \emph{completely}, so $\dot\theta_{\mathrm{aim}}$ must then be the rate of the \emph{current} line of sight and the $T_p$-ahead prediction is no longer in the control path. We implemented and benchmarked this variant (Sec.~\ref{sec:final}) and \emph{did not adopt it}: the brief's architecture requires the turret to track the predicted elevation reference, which the finalized lag design does.
 
 \subsection{Dual-mode acquisition, saturation and pulse logic}\label{sec:acq}
-Because the turret is a saturated integrator, the initial $0^\circ\!\to$target slew is rate-limited at $13.7^\circ$/s and dominates the interception time. A bounded dual-mode supervisor commands a near-time-optimal maximum-rate slew~\cite{athans} while the pointing error exceeds a small band and hands off --- with the feedforward already primed and the compensator state set consistently --- to the LTI tracker inside the band. The band is set from the geometry of the unwind: at hand-off the turret is still moving at up to $0.24$~rad/s and the compensator's $1/p=0.25$~s relaxation covers a further $\approx3.4^\circ$, so a band below $\approx1.5^\circ$ re-enters saturation and the capture oscillates; $2.5^\circ$ keeps the hand-off clean while leaving the slew phase as short as possible. The engagement-phase controller is the 2-DOF LTI design above, so the acquisition mode is a front-end, not a second controller.
+Because the turret is a saturated integrator, the initial $0^\circ\!\to$target slew is rate-limited at $13.7^\circ$/s and dominates the interception time. A bounded dual-mode supervisor commands a near-time-optimal maximum-rate slew~\cite{athans} while the pointing error exceeds a small band and hands off --- with the compensator state set consistently so the transfer is bumpless --- to the LTI tracker inside the band. The band is set from the geometry of the unwind: at hand-off the turret is still moving at up to $0.24$~rad/s and the compensator's $1/p=0.25$~s relaxation covers a further $\approx3.4^\circ$, so a band of $1.5^\circ$ or less re-enters saturation and the capture chatters (\texttt{run\_band\_sweep.m}); $2.5^\circ$ keeps the hand-off clean while leaving the slew phase as short as possible. The engagement-phase controller is the LTI lag design above, so the acquisition mode is a front-end, not a second controller.
 
-The compensator has no pure integrator (its pole is at $-p$, not the origin), so windup is structurally limited; the discrete implementation additionally clamps the feedback state to the saturated output (exact back-calculation anti-windup), and a command toward an already-saturated hard stop is zeroed. An engagement pulse fires on the rising edge of the fire command, with $\ge1.0$~s since the last issued pulse, when the filter's \emph{current} estimate gives perpendicular miss $d_\perp\le1.5$~m and cross-beam position uncertainty $\sigma_\perp\le1.0$~m (a $0.5$~m margin to $R_{\mathrm{eng}}=2$~m, and a gate against confident-but-noisy shots). The current estimate is used, not the prediction, because a pulse is instantaneous.
+The compensator has no pure integrator (its pole is at $-p$, not the origin), so windup is structurally limited; the discrete implementation additionally clamps the compensator state to the saturated output (exact back-calculation anti-windup), and a command toward an already-saturated hard stop is zeroed. An engagement pulse fires on the rising edge of the fire command, with $\ge1.0$~s since the last issued pulse, when the filter's \emph{current} estimate gives perpendicular miss $d_\perp\le1.5$~m and cross-beam position uncertainty $\sigma_\perp\le1.0$~m (a $0.5$~m margin to $R_{\mathrm{eng}}=2$~m, and a gate against confident-but-noisy shots). The current estimate is used, not the prediction, because a pulse is instantaneous.
 
 \subsection{Estimator optimality and the single-model choice}\label{sec:opt}
 A natural question is whether a richer estimator --- an IMM over constant-velocity/acceleration/coordinated-turn models, or an adaptive-process-noise filter --- would improve prediction. We answer it quantitatively. The posterior Cram\'er--Rao lower bound (PCRLB)~\cite{tichavsky} for the position estimate, computed recursively along a maneuver-plus-loss trajectory, is compared with the filter's Monte-Carlo RMS error over $M=300$ runs (Fig.~\ref{fig:pcrlb}). The filter RMS tracks $\sqrt{\mathrm{PCRLB}}$ to within $5\%$ (ratio $0.95$), both growing during the loss and recovering together; the mean normalized innovation squared is $1.9$ ($2$~dof), confirming consistency (mean NEES $3.7$, i.e.\ slightly conservative by the $q_j$ choice). The CA filter therefore already extracts essentially all available information over the $0.5$~s horizon. Consistent with this, an interacting-multiple-model (IMM) filter~\cite{blom} (CV, CA and a coordinated-turn EKF~\cite{li} with the turn rate as a filtered state) and an NIS-adaptive-$Q$ filter, both implemented and frozen, \emph{match but do not beat} CA in the ablation of Sec.~\ref{sec:final}; the IMM is in fact worse when coasting through an in-turn loss. With no estimation headroom to recover, the simple single-model estimator is the right choice, and the design effort belongs on the control side.
@@ -289,7 +271,7 @@ $K_{\mathrm{dc}}$                      & $9.985\times10^{-4}$ rad/s/V & d\\
 $V_{\max}$                             & $\pm240$ V               & c\\
 $q_j$                                  & 200 m$^2$/s$^5$          & c\\
 $K_p$, $p$                             & 2003 V/rad, 4 rad/s      & d\\
-$k_v$, $k_a$                           & 1001.5 V/(rad/s), 3.2 V/(rad/s$^2$) & d\\
+$k_v$, $k_a$ (FF variant only)         & 1001.5 V/(rad/s), 3.2 V/(rad/s$^2$) & d\\
 Fire gate $d_\perp$, $\sigma_\perp$    & 1.5 m, 1.0 m             & c\\
 Band, slew gain                        & $2.5^\circ$, 20\,000 V/rad & c\\
 \bottomrule
@@ -309,12 +291,12 @@ All scenarios run the identical finalized design over $0\le t\le10$~s with a 1~m
 \midrule
 RMS pos.\ err.\ [m] & 0.67 & 0.71 & 0.74 & 0.70\\
 RMS pred.\ err.\ [m] & 3.40 & 3.52 & 3.54 & 3.53\\
-RMS $\theta_{\mathrm{LOS}}-\theta_t$ post-acq.\ [deg] & 0.070 & 0.065 & 0.065 & 0.067\\
-RMS miss (buf., post-acq) [m] & 0.27 & 0.67 & 0.67 & 0.79\\
+RMS $\theta_{\mathrm{LOS}}-\theta_t$ post-acq.\ [deg] & 0.064 & 0.075 & 0.075 & 0.080\\
+RMS miss (buf., post-acq) [m] & 0.31 & 1.07 & 1.07 & 1.25\\
 Pulses issued / successful & 8/8 & 8/8 & 8/8 & 8/8\\
-Interception time [s] & 2.30 & 1.94 & 1.94 & 1.94\\
-Acquisition time [s] & 3.16 & 2.87 & 2.87 & 2.87\\
-Voltage saturation duty [\%] & 20.2 & 16.8 & 16.8 & 16.8\\
+Interception time [s] & 2.26 & 1.92 & 1.92 & 1.92\\
+Acquisition time [s] & 3.22 & 2.88 & 2.88 & 2.88\\
+Voltage saturation duty [\%] & 20.8 & 17.0 & 17.0 & 17.0\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -326,30 +308,32 @@ Voltage saturation duty [\%] & 20.2 & 16.8 & 16.8 & 16.8\\
 \label{fig:scenC}
 \end{figure}
 
-Every case intercepts on its first pulse: the turret acquires the target and the beam is within $R_{\mathrm{eng}}$ at $2.30$~s (A), $1.94$~s (B) and $1.94$~s (C), and steady tracking (true miss $\le10$~m from then on) is established by $3.16$~s, $2.87$~s and $2.87$~s. The post-acquisition LOS pointing error is $0.065^\circ$--$0.070^\circ$ in all cases. In scenario A the turret is slew-limited for the first $2.2$~s; the beam sweeps across the target at $2.3$~s, the residual rate is arrested within $\approx0.25$~s, and a small overshoot of $\approx1^\circ$ decays by $3.2$~s --- the expected signature of a rate-limited turret with a finite-bandwidth compensator. The $0.5$~s loss in Scenario C is absorbed with the position-estimate standard deviation growing roughly sixfold ($0.57\to3.47$~m) and collapsing back within one post-recovery measurement, leaving the tracking and engagement metrics essentially unchanged from the no-loss maneuver (B). In the mid-engagement loss C2 the peak transient pointing error is $0.06^\circ$ and the true miss never exceeds $1.64$~m, so the outage does not break the engagement.
+Every case intercepts on its first pulse: the turret acquires the target and the beam is within $R_{\mathrm{eng}}$ at $2.26$~s (A), $1.92$~s (B) and $1.92$~s (C), and steady tracking (true miss $\le10$~m from then on) is established by $3.22$~s, $2.88$~s and $2.88$~s. The post-acquisition LOS pointing error is $0.064^\circ$--$0.080^\circ$ in all cases. In scenario A the turret is slew-limited for the first $2.1$~s; the beam sweeps across the target at $2.26$~s, and a residual pointing error of $\approx1.1^\circ$ decays below $0.2^\circ$ by $3.5$~s --- the expected signature of a rate-limited turret with a finite-bandwidth compensator. The $0.5$~s loss in Scenario C is absorbed with the position-estimate standard deviation growing roughly sixfold ($0.57\to3.47$~m) and collapsing back within one post-recovery measurement, leaving the tracking and engagement metrics essentially unchanged from the no-loss maneuver (B). In the mid-engagement loss C2 the peak pointing error in the outage window is $0.10^\circ$ and the true miss peaks at $2.27$~m, against $2.18$~m for the same maneuver without a loss; all eight pulses still hit, so the outage does not break the engagement. The peak miss in B--C2 therefore comes from the maneuver itself rather than from the outage.
 
 \section{Final Evaluation and Ablation}\label{sec:final}
 No instructor-provided evaluation cases were released at the time of writing, so the finalized controller is evaluated on a suite that reproduces exactly the conditions the brief specifies for those cases: $N=40$ randomized trials (seeds 101--140), each randomizing the initial range, bearing and speed, one to three smooth acceleration segments in both axes, and one or two measurement-loss intervals, all re-checked against the operating envelope; plus a harder \emph{stress} suite of 24 sustained high-rate coordinated turns with a $0.5$~s loss placed \emph{inside} the turn and a sharp tangential kick. The finalized \texttt{turret\_controller.m} is reused verbatim --- one frozen design per column, no per-case retuning --- and the evaluation harness is the same 1~ms RK4 closed loop used for the standardized scenarios, so the reportable metrics (interception success, interception time, engagement accuracy, consistency) are computed exactly as the brief defines them.
 
 \begin{table}[t]
 \centering\scriptsize
-\caption{Final evaluation and ablation (means). O: original 40 seeds; S: stress 24. aQ/IMM: estimator swapped in the finalized design. Each column is one frozen design, no retuning.}
+\caption{Final evaluation and ablation (means). O: original 40 seeds; S: stress 24. Base: lag compensator, linear acquisition. FF$^*$: finalized $+$ feedforward aimed at the current estimate (comparison only, not adopted). aQ/IMM: estimator swapped in the finalized design. Each column is one frozen design, no retuning.}
 \label{tab:final}
 \begin{tabular}{@{}lccccc@{}}
 \toprule
- & Base & $+$FF & \textbf{Final} & aQ & IMM \\
+ & Base & \textbf{Final} & FF$^*$ & aQ & IMM \\
 \midrule
-Success [\%] O/S      & 100/100 & 100/100 & \textbf{100/100} & 100/100 & 100/100 \\
-Interception [s] (O)  & 2.87 & 2.86 & \textbf{2.63} & 2.63 & 2.60 \\
-RMS point.\ [deg] (O) & 0.098 & 0.097 & \textbf{0.073} & 0.073 & 0.077 \\
-RMS miss [m] (O)      & 0.98 & 0.87 & \textbf{0.59} & 0.61 & 0.79 \\
-RMS miss [m] (S)      & 1.37 & 1.08 & \textbf{0.89} & 0.92 & 1.18 \\
-Pred.\ coast [m] (S)  & 4.26 & 4.26 & \textbf{4.26} & 4.82 & 6.40 \\
+Success [\%] O/S      & 100/100 & \textbf{100/95.8} & 100/100 & 100/95.8 & 100/100 \\
+Interception [s] (O)  & 2.87 & \textbf{2.67} & 2.63 & 2.67 & 2.67 \\
+RMS point.\ [deg] (O) & 0.098 & \textbf{0.074} & 0.073 & 0.075 & 0.089 \\
+RMS miss [m] (O)      & 0.98 & \textbf{0.75} & 0.59 & 0.79 & 1.28 \\
+RMS miss [m] (S)      & 1.37 & \textbf{1.22} & 0.89 & 1.18 & 2.06 \\
+Pred.\ coast [m] (S)  & 4.26 & \textbf{4.26} & 4.26 & 4.82 & 6.40 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-Table~\ref{tab:final} reads as the design logic in reverse. Starting from the LTI feedback-only design (Base: $100\%$, mean miss $0.98$~m), the 2-DOF feedforward cuts the miss to $0.87$~m (O) and $1.08$~m (S) by tightening pointing --- most visibly at high angular rate (Fig.~\ref{fig:ff}) --- and the dual-mode front-end then cuts the interception time to $2.63$~s and the miss to $0.59$~m (O) / $0.89$~m (S): a $40\%$ / $35\%$ reduction over the feedback-only design, with $100\%$ interception preserved throughout. Swapping the CA estimator for adaptive-$Q$ or IMM (last two columns) does \emph{not} help: the adaptive-$Q$ filter inflates the covariance on maneuver detections, which slightly worsens both the pointing error and the miss, and the IMM degrades the in-turn-loss prediction ($6.40$~m vs.\ $4.26$~m coasting) and the miss distance, confirming Sec.~\ref{sec:opt}. Over the 40 original cases the finalized design issues $7.53$ pulses on average with a $98.3\%$ per-pulse hit rate, a mean interception time of $2.63$~s (median $2.76$, max $4.93$), and a mean post-acquisition RMS miss of $0.59$~m (95th-percentile $0.93$~m; worst single-case $1.36$~m). Fig.~\ref{fig:dist} shows the per-case distributions behind these means: interception time is tightly clustered between $1.5$ and $4.5$~s and the miss distribution sits well inside the $2$~m engagement radius.
+Table~\ref{tab:final} reads as the design logic in reverse. Starting from the linear baseline (lag compensator, linear acquisition: $100\%$, mean RMS miss $0.98$~m (O) and $1.37$~m (S)), the bounded dual-mode front-end cuts the interception time from $2.87$~s to $2.67$~s and the RMS miss to $0.75$~m (O) and $1.22$~m (S), i.e.\ by $23\%$ and $11\%$, and $100\%$ of the 40 original cases intercept. Swapping the CA estimator for adaptive-$Q$ or IMM (last two columns) does \emph{not} help: adaptive-$Q$ inflates the covariance on maneuver detections and slightly worsens the miss, and the IMM degrades the in-turn-loss prediction ($6.40$~m vs.\ $4.26$~m coasting) and raises the stress-suite miss by $70\%$, confirming Sec.~\ref{sec:opt}.
+
+The results also show where the finalized design is weaker; we report it rather than tune it away. On the stress suite it intercepts $23$ of $24$ cases ($95.8\%$). In one of the 40 original cases (seed 116) the beam, after four hits, drifts $25$--$36$~m off the target in the last two seconds, with the predicted reference about $3.5^\circ$ from the true line of sight. The acquisition time is undefined for that case, so its post-acquisition statistics are computed over the remaining $39$. Both are consistent with prediction error over the $0.5$~s horizon, because the feedforward variant FF$^*$ of Sec.~\ref{sec:ff}, which does not use the prediction, does not show them (stress $100\%$, RMS miss $0.59$~m (O) and $0.89$~m (S)); it aims at the \emph{current} estimate and is reported as a comparison and not adopted, because it takes the prescribed prediction out of the control path. Over the 40 original cases the finalized design issues $7.45$ pulses on average with a $98.7\%$ per-pulse hit rate, a mean interception time of $2.67$~s (median $2.99$, max $4.93$), and a mean post-acquisition RMS miss of $0.75$~m ($95$th percentile $1.15$~m; worst of the 39 defined cases $1.17$~m); Fig.~\ref{fig:dist} shows the per-case distributions (interception time spans $0.5$--$4.9$~s).
 
 \begin{figure}[t]
 \centering
@@ -358,10 +342,10 @@ Table~\ref{tab:final} reads as the design logic in reverse. Starting from the LT
 \label{fig:dist}
 \end{figure}
 
-\textbf{Reproducibility.} All code, figures and scripts needed to reproduce every number and figure are at \url{https://github.com/IshaanM05/319-Assignment-2}. The finalized design is the default in \texttt{turret\_params.m}; \texttt{design\_analysis.m}, \texttt{run\_scenarios.m}, \texttt{run\_final\_evaluation.m}, \texttt{run\_headtohead.m} and \texttt{run\_rigor.m} regenerate the analysis, scenario, evaluation, ablation and optimality results, and \texttt{README.md} and \texttt{IMPROVEMENTS.md} document how to reproduce them and the design study behind them.
+\textbf{Reproducibility.} All code, parameters, figures and scripts are at \url{https://github.com/IshaanM05/319-Assignment-2}. The finalized design is the default in \texttt{turret\_params.m}; the \texttt{run\_*.m} scripts and \texttt{design\_analysis.m} regenerate every table and figure, as listed in \texttt{README.md}.
 
 \section{Conclusions}
-A constant-acceleration Kalman filter with a fixed $0.5$~s prediction, a two-degree-of-freedom LTI controller --- a lag-matched feedback compensator whose pole is \emph{derived} so the closed-loop delay equals the prediction horizon, plus a model-inverse feedforward that holds that delay accurate under angular acceleration --- and a bounded dual-mode acquisition front-end track and engage a maneuvering aerial target with $38$~dB gain margin, $65^\circ$ phase margin and sub-$0.1^\circ$ steady pointing error, riding through $0.5$~s radar outages. Across 40 randomized maneuvers with no retuning it achieves $100\%$ interception, a mean interception time of $2.63$~s, and a $0.59$~m mean RMS miss. Every design decision is backed by analysis: the feedback pole and the feedforward gains are derived from the plant, not tuned; the estimator is shown within $5\%$ of the posterior Cram\'er--Rao bound, which is why the simpler single-model CA filter is kept and the IMM/adaptive alternatives --- implemented and benchmarked --- are deliberately not adopted. \textbf{Limitations:} the lag match is a small-signal argument, but the feedforward extends accurate tracking well past it; the CA white-jerk model is a first-order fit to the maneuver library, so a discontinuous bang-bang acceleration would be tracked with larger transient error; acquisition is rate-limited by the drive, so a faster slew (higher $V_{\max}$ or a smaller reflected inertia) is the only route to a materially smaller interception time; and MPC/LQG with explicit constraint handling is the natural next step should the envelope tighten.
+A constant-acceleration Kalman filter with a fixed $0.5$~s prediction, a conventional LTI lag compensator on the predicted elevation reference --- its gain and pole \emph{derived} so the closed-loop delay equals the prediction horizon --- and a bounded dual-mode acquisition front-end track and engage a maneuvering aerial target with $38$~dB gain margin, $65^\circ$ phase margin and sub-$0.1^\circ$ post-acquisition pointing error, riding through $0.5$~s radar outages. Across 40 randomized maneuvers with no retuning it achieves $100\%$ interception, a mean interception time of $2.67$~s and a $0.75$~m mean RMS miss. The design is backed by analysis: the compensator is derived from the plant, and the estimator is shown within $5\%$ of the posterior Cram\'er--Rao bound, which is why the simpler single-model CA filter is kept and the IMM/adaptive alternatives --- implemented and benchmarked --- are not adopted. \textbf{Limitations:} the lag match is a small-signal argument and the design relies on the CA extrapolation over $T_p$, so prediction error over the horizon limits accuracy (one of 40 original cases drifts off the target late in the run, and $23$ of $24$ stress cases intercept); a model-inverse feedforward that aims at the current estimate does not show this and gives $0.59$~m, but it bypasses the prediction stage and was therefore not adopted; acquisition is rate-limited by the drive, so a faster slew (higher $V_{\max}$ or a smaller reflected inertia) is the only route to a materially smaller interception time; and MPC/LQG with explicit constraint handling is the natural next step should the envelope tighten.
 
 \begin{thebibliography}{9}
 
@@ -404,10 +388,10 @@ H.~A.~P. Blom and Y.~Bar-Shalom, ``The interacting multiple model algorithm for 
 An AI coding assistant (a large language model accessed through an agentic coding tool) was used throughout: derivation, MATLAB implementation, simulation, figure generation, and this manuscript's drafting. MATLAB R2026a (Control System Toolbox) performed all numerical linear-system analysis (\texttt{margin}, \texttt{bode}, \texttt{feedback}, \texttt{stepinfo}, \texttt{bandwidth}); LaTeX (MiKTeX) built the manuscript and its TikZ figures. No other AI tool was used.
 
 \subsection*{B. How the AI contributed and was validated}
-The AI (i) derived the elevation-drive transfer function and cross-checked it numerically against the state-space ODEs (agreement $1.7\times10^{-20}$); (ii) implemented the CA Kalman filter with Joseph-form update; (iii) derived the lag-matched compensator (Eq.~\eqref{eq:gc}) and the model-inverse feedforward (Eq.~\eqref{eq:ff}) and ran the Bode/margin, group-delay and controller-only feedforward analyses; (iv) implemented the dual-mode acquisition front-end, the PCRLB/NEES/NIS optimality study, and the IMM and adaptive-$Q$ estimators used in the ablation; and (v) implemented all required MATLAB functions and drivers and wrote this manuscript.
+The AI (i) derived the elevation-drive transfer function and cross-checked it numerically against the state-space ODEs (agreement $1.7\times10^{-20}$); (ii) implemented the CA Kalman filter with Joseph-form update; (iii) derived the lag-matched compensator (Eq.~\eqref{eq:gc}) and the model-inverse feedforward variant (Eq.~\eqref{eq:ff}) and ran the Bode/margin, group-delay and controller-only feedforward analyses; (iv) implemented the dual-mode acquisition front-end, the PCRLB/NEES/NIS optimality study, and the IMM and adaptive-$Q$ estimators used in the ablation; and (v) implemented all required MATLAB functions and drivers and wrote this manuscript.
 
 \subsection*{C. Disposition of AI-generated outputs}
-Table~\ref{tab:ai} records what was accepted, corrected or rejected, and the engineering reasoning used to validate each item. Nothing was adopted on the strength of a generated claim alone: every statement in Secs.~III--VI is backed by a script in the repository that regenerates the number. The manuscript text itself was re-read against the regenerated outputs, which is how the dark figure backgrounds, the mislabelled ablation axis and the stale IMM success rate in the last row were caught.
+Table~\ref{tab:ai} records what was accepted, corrected or rejected, and the engineering reasoning used to validate each item. Nothing was adopted on the strength of a generated claim alone: every statement in Secs.~III--VI is backed by a script in the repository that regenerates the number. The manuscript text itself was re-read against the regenerated outputs and the code, which is how the dark figure backgrounds, the mislabelled ablation axis, the stale IMM success rate and --- most importantly --- a mismatch between the paper and the code were caught.
 
 \begin{table}[h]
 \centering\footnotesize
@@ -419,11 +403,11 @@ Output & Status & Validation / reasoning\\
 \midrule
 Plant $G_p(s)$, $K_{\mathrm{dc}}$ & accepted & Cross-checked against the nonlinear state-space ODEs ($1.7\times10^{-20}$); $K_{\mathrm{dc}}$ re-derived by hand and matched to the simulated slew rate (0.2404 vs.\ 0.2396 rad/s).\\
 Lag-matched $G_c(s)$ & accepted & Margins, bandwidth, group delay and the PI comparison computed analytically and simulated; group delay equals $T_p$ to 0.1\% at 0.1 rad/s.\\
-2-DOF feedforward & corrected & First version carried only the rate term; the acceleration term was added to complete the plant inversion, and the sweep re-run (improvement $19\times\to80\times$).\\
-Dual-mode acquisition & accepted, re-justified & Initially justified only as ``near-time-optimal''; the hand-off band was instead set from the saturated-rate unwind geometry and checked by a band sweep ($<1.5^\circ$ destabilizes the capture).\\
+Feedforward variant & built, not adopted & Rate term first, acceleration term added (improvement $19\times\to80\times$). An audit that compared the logged $\theta_{\mathrm{ref}}$ with $\mathrm{atan2}$ of the predicted state showed it aimed at the \emph{current} estimate, bypassing $T_p$; the lag design was made the default and all results regenerated.\\
+Dual-mode acquisition & accepted, re-justified & Initially justified only as ``near-time-optimal''; the hand-off band was instead set from the saturated-rate unwind geometry and checked by a band sweep (\texttt{run\_band\_sweep.m}: $1^\circ$ chatters, $\ge2^\circ$ is clean).\\
 IMM, adaptive-$Q$ & built, then rejected & Both implemented and benchmarked; no gain, and the PCRLB shows $<5\%$ estimation headroom. Reported, not adopted.\\
-Suggested PI & rejected & Type-2 loop leads the target by $T_p$ (111 m at 800 m) and its gain margin sits on the plant resonance.\\
-Narrative and figures & corrected & Dark-background figures, a mislabelled ablation axis and a stale IMM success rate were found by re-running and re-reading the outputs, then fixed.\\
+PI compensator & rejected & Type-2 loop leads the target by $T_p$ (111 m at 800 m) and its gain margin sits on the plant resonance.\\
+Narrative and figures & corrected & Dark figures, a mislabelled axis, a stale IMM rate and a paper/code mismatch were found by re-running and re-reading, then fixed.\\
 \bottomrule
 \end{tabular}
 \end{table}

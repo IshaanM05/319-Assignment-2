@@ -9,7 +9,7 @@ robustness to unmodelled manoeuvres).  Because it already extracts essentially a
 available information, the IMM / adaptive-Q variants have no estimation headroom to
 recover on this envelope/horizon -- the measurable gains are on the CONTROL side.
 
-=== PART B: 2-DOF feedforward vs baseline lag (controller-only) ===
+=== PART B: feedforward variant vs lag-only (controller-only) ===
   w=0.2 rad/s: RMS err baseline 0.0014 deg -> FF 0.0003 deg  (x5.0 better)
   w=0.3 rad/s: RMS err baseline 0.0064 deg -> FF 0.0003 deg  (x19.5 better)
   w=0.5 rad/s: RMS err baseline 0.0176 deg -> FF 0.0005 deg  (x32.6 better)

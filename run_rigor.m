@@ -10,7 +10,7 @@
 %       meaningfully beat it (there is no estimation headroom to recover).
 %     * NEES (6-state) and NIS (2-D innovation) chi-square consistency tests.
 %
-%   PART B -- 2-DOF feedforward removes the high-rate tracking lag (B1):
+%   PART B -- the feedforward variant removes the high-rate tracking lag (B1):
 %     The elevation loop is driven by a sinusoidal line-of-sight angle of
 %     increasing angular rate.  The baseline (lag-matched, aims t_p ahead) is
 %     exact only for CONSTANT angular rate; its error grows with angular
@@ -138,7 +138,7 @@ exportgraphics(f2,fullfile(figdir,'fig_consistency.png'),'Resolution',200, 'Back
 %% ===================== PART B: feedforward removes high-rate lag =============
 % Drive the elevation plant with a sinusoidal line-of-sight angle of amplitude A
 % and frequency w; compare the feedback-only baseline (aim theta(t+Tp), lag Gc)
-% vs the 2-DOF design (aim theta(t), lag Gc + the model-inverse feedforward
+% vs the feedforward variant (aim theta(t), lag Gc + the model-inverse feedforward
 % V_ff = thetadot/Kdc + (Rm Jeq / N Kt) thetaddot).  True kinematics are fed in,
 % so this isolates the controller from the estimator.
 % The peak LOS angular RATE is held FIXED and well below the turret's saturated
@@ -164,7 +164,7 @@ wdemo=1.0; A=vref/wdemo;
 thref=@(tt) th0+A*sin(wdemo*tt); thd=@(tt) vref*cos(wdemo*tt); thdd=@(tt) -vref*wdemo*sin(wdemo*tt);
 [eb,thb]=local_track(t,dt,thref,thd,thdd,P,false); [ef,thf]=local_track(t,dt,thref,thd,thdd,P,true);
 
-fprintf(fid,'=== PART B: 2-DOF feedforward vs baseline lag (controller-only) ===\n');
+fprintf(fid,'=== PART B: feedforward variant vs lag-only (controller-only) ===\n');
 for iw=1:numel(ws)
     fprintf(fid,'  w=%.1f rad/s: RMS err baseline %.4f deg -> FF %.4f deg  (x%.1f better)\n', ...
         ws(iw),rms_base(iw),rms_ff(iw),rms_base(iw)/max(rms_ff(iw),1e-9));
@@ -176,7 +176,7 @@ f3=figure('Position',[50 50 1000 360],'Visible','off'); tiledlayout(1,2,'TileSpa
 nexttile; hold on; grid on;
 plot(ws,rms_base,'o-','LineWidth',1.3); plot(ws,rms_ff,'s-','LineWidth',1.3);
 xlabel('LOS angular rate \omega [rad/s]'); ylabel('steady RMS pointing error [deg]');
-legend({'baseline (lag-matched)','2-DOF feedforward'},'Location','northwest','FontSize',8);
+legend({'baseline (lag-matched)','lag + feedforward'},'Location','northwest','FontSize',8);
 title('Tracking error vs angular rate');
 nexttile; hold on; grid on;
 plot(t,rad2deg(eb),'LineWidth',1.1); plot(t,rad2deg(ef),'LineWidth',1.1);
@@ -213,7 +213,7 @@ end
 
 function [err,thh]=local_track(t,dt,thref,thd,thdd,P,useff)
 % Integrate the nonlinear elevation drive under the feedback-only baseline or the
-% 2-DOF (lag feedback + model-inverse feedforward) design.
+% feedforward variant (lag feedback + model-inverse feedforward).
 X=[thref(0);0;0]; N=numel(t); err=zeros(N,1); thh=zeros(N,1); xf=0;
 for k=1:N
     tt=t(k); th=X(1);

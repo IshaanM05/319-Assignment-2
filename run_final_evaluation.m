@@ -69,9 +69,10 @@ fprintf(fid, 'FINAL EVALUATION: %d randomized cases (seeds %d-%d), ONE fixed des
 fprintf(fid, 'Interception success rate: %d/%d = %.1f %%\n', sum(M.succ), N, 100*succ_rate);
 fprintf(fid, 'Interception time: mean %.3f s, median %.3f s, std %.3f s\n', mean(M.thit,'omitnan'), median(M.thit,'omitnan'), std(M.thit,'omitnan'));
 fprintf(fid, 'Pulses/case: mean %.2f; successful-pulse fraction %.1f %%\n', mean(M.npulse), 100*sum(M.nhit)/sum(M.npulse));
-fprintf(fid, 'Max miss distance (post-acq): mean %.2f m, 95th pct %.2f m, max %.2f m\n', mean(M.maxmiss), prctile(M.maxmiss,95), max(M.maxmiss));
+fprintf(fid, 'Max miss distance (post-acq): mean %.2f m, 95th pct %.2f m, max %.2f m\n', mean(M.maxmiss,'omitnan'), prctile(M.maxmiss,95), max(M.maxmiss));
+fprintf(fid, 'Cases with the acquisition time undefined (true miss still > 10 m at t_end): %d (seeds %s); post-acq statistics use the other %d cases\n', sum(isnan(M.tacq)), mat2str(seeds(isnan(M.tacq))), sum(~isnan(M.tacq)));
 fprintf(fid, 'RMS miss distance (post-acq, buffered): mean %.2f m, 95th pct %.2f m\n', mean(M.rmsmiss,'omitnan'), prctile(M.rmsmiss,95));
-fprintf(fid, 'RMS pos err: mean %.2f m; RMS pred err: mean %.2f m; RMS elos (post-acq): mean %.4f deg\n', mean(M.rmspos), mean(M.rmspred), mean(M.rmselos));
+fprintf(fid, 'RMS pos err: mean %.2f m; RMS pred err: mean %.2f m; RMS elos (post-acq): mean %.4f deg\n', mean(M.rmspos), mean(M.rmspred), mean(M.rmselos,'omitnan'));
 fprintf(fid, 'Acquisition time: mean %.2f s, median %.2f s, max %.2f s\n', mean(M.tacq,'omitnan'), median(M.tacq,'omitnan'), max(M.tacq));
 fprintf(fid, 'Voltage saturation duty cycle: mean %.1f %%\n', mean(M.vsat));
 fclose(fid);
