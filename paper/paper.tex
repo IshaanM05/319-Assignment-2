@@ -43,78 +43,80 @@ Fig.~\ref{fig:schem} shows the physical layout in the elevation plane and Fig.~\
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[font=\footnotesize, >=Latex, x=1.04cm, y=1.04cm]
-% ---- horizontal datum through the trunnion
-\draw[gray!70, ->] (0.62,0) -- (4.85,0);
-% ---- elevation drive and trunnion
-\fill[gray!15] (-0.60,-0.95) rectangle (0.60,0);
-\draw[thick] (-0.60,-0.95) rectangle (0.60,0);
-\node[align=center, font=\scriptsize] at (0,-1.16) {elevation drive};
-\node[align=center, font=\scriptsize] at (0,-1.38) {motor $+$ $100\!:\!1$ gearbox};
-\fill (0,0) circle (0.05);
-\node[font=\scriptsize, anchor=south east] at (-0.10,0.08) {$O$};
-% ---- radar, co-located with the turret
-\draw[thick] (-0.48,0.04) -- (-0.36,0.26) -- (-0.24,0.04);
-\node[font=\scriptsize, anchor=east] at (-0.56,0.28) {radar};
-% ---- turret cradle and barrel, laid on the predicted line of sight
-\begin{scope}[rotate=50]
-  \draw[thick, fill=blue!12] (-0.24,-0.10) rectangle (2.45,0.10);
-  \draw[thick, fill=blue!12] (2.45,-0.10) -- (2.78,0) -- (2.45,0.10) -- cycle;
+\begin{tikzpicture}[font=\scriptsize, >=Latex, x=1.0cm, y=1.0cm]
+% ---- horizontal datum through the trunnion O
+\draw[gray!70, dashed] (0,0) -- (7.0,0);
+% ---- pedestal and elevation drive housing
+\draw[thick, fill=gray!15] (-0.55,-0.95) -- (0.55,-0.95) -- (0.38,-0.18) -- (-0.38,-0.18) -- cycle;
+\node[align=center] at (0,-1.42) {elevation drive\\motor $+$ $100\!:\!1$ gearbox};
+% ---- co-located radar, to the left of the pedestal
+\draw[thick, fill=gray!15] (-1.65,-0.62) -- (-0.95,-0.62) -- (-0.95,-0.45) arc (0:180:0.35) -- cycle;
+\node[anchor=north] at (-1.30,-0.68) {radar};
+% ---- turret barrel on the elevation theta_t
+\begin{scope}[rotate=38]
+  \draw[thick, fill=blue!12] (-0.18,-0.10) rectangle (2.55,0.10);
+  \draw[thick, fill=blue!12] (2.55,-0.10) -- (2.85,0) -- (2.55,0.10) -- cycle;
 \end{scope}
-% ---- laser ray from the muzzle, through the predicted position
-\draw[red, thick, ->] (50:2.78) -- (50:4.12);
-% ---- line of sight to the current target position
-\draw[dashed] (0,0) -- node[pos=0.78, below right=-1pt, font=\scriptsize] {$r(t)$} (40:3.95);
-\coordinate (T) at (40:3.95);
-\draw[thick, fill=gray!35] ($(T)+(0,0.15)$) -- ($(T)+(0.28,-0.15)$) -- ($(T)+(-0.28,-0.15)$) -- cycle;
-\node[anchor=west, font=\scriptsize] at ($(T)+(0.34,0)$) {V-44 target};
-\draw[red!60, dashed] (T) circle (0.19);
-\node[font=\scriptsize, anchor=north] at ($(T)+(0.14,-0.24)$) {$R_{\mathrm{eng}}$};
-% ---- predicted target position, where the turret is laid
-\coordinate (P) at (50:3.95);
-\draw[gray!60, thick, dashed] (P) circle (0.18);
-\node[anchor=west, font=\scriptsize] at ($(P)+(0.22,0.10)$) {predicted};
+\fill (0,0) circle (0.055);
+\node[anchor=east] at (-0.10,0.17) {$O$};
+% ---- target trajectory (incoming from the right), current and predicted positions
+\coordinate (T0) at (22:7.0);
+\coordinate (T)  at (30:6.0);
+\coordinate (P)  at (38:5.6);
+\draw[gray!70, dashed] (T0) .. controls (26:6.4) and (29:6.2) .. (T) .. controls (33:5.9) and (36:5.7) .. (P);
+\draw[->, gray!70, dashed] (P) -- ++(104:0.55);
+% ---- line of sight to the current target, and the laser toward the predicted position
+\draw[dashed] (0,0) -- node[pos=0.58, below right=0pt and -1pt] {$r(t)$} (T);
+\draw[red, thick, ->] (38:2.85) -- (38:5.25);
+% ---- target markers
+\draw[thick, fill=gray!40] ($(T)+(0,0.17)$) -- ($(T)+(0.30,-0.14)$) -- ($(T)+(-0.30,-0.14)$) -- cycle;
+\draw[red!70, dashed] (T) circle (0.34);
+\node[anchor=north west, align=left] at ($(T)+(0.40,-0.62)$) {V-44 target\\at $t$};
+\draw[gray!60, thick, dashed] (P) circle (0.20);
+\node[anchor=south, align=center] at ($(P)+(0.1,0.62)$) {predicted\\position, $t{+}T_p$};
+\node[anchor=west, red!70] at ($(T)+(0.28,0.30)$) {$R_{\mathrm{eng}}$};
 % ---- elevation angles, measured from the datum
-\draw[->] (1.50,0) arc (0:50:1.50);
-\node[font=\scriptsize, anchor=west] at (1.42,0.70) {$\theta_t$};
-\draw[->] (2.40,0) arc (0:40:2.40);
-\node[font=\scriptsize, anchor=west] at (2.28,1.02) {$\theta_{\mathrm{LOS}}$};
+\draw[->] (1.45,0) arc (0:38:1.45);
+\node[anchor=south east] at (43:1.62) {$\theta_t$};
+\draw[->] (2.60,0) arc (0:30:2.60);
+\node[anchor=west] at (13:2.70) {$\theta_{\mathrm{LOS}}$};
 \end{tikzpicture}
-\caption{Engineering schematic of the elevation-plane engagement (not to scale; the lead angle is exaggerated). The turret rotates about the trunnion $O$, driven through a $100\!:\!1$ gearbox by a motor that sets the elevation angle $\theta_t$, mechanically limited to $-10^\circ\le\theta_t\le+85^\circ$. A co-located radar measures the target range $r$ and line-of-sight angle $\theta_{\mathrm{LOS}}$ at 20~Hz. The laser (red) is laid on the \emph{predicted} line of sight---the open marker is the target position $T_p=0.5$~s ahead---so that the beam meets the target where it will be; a pulse engages when the beam-to-target distance is within $R_{\mathrm{eng}}=2$~m.}
+\caption{Engineering schematic of the elevation-plane engagement (not to scale; the lead angle is exaggerated). The turret rotates about the trunnion $O$, driven through a $100\!:\!1$ gearbox by a motor that sets the elevation $\theta_t\in[-10^\circ,+85^\circ]$. The co-located radar measures the range $r$ and line-of-sight angle $\theta_{\mathrm{LOS}}$ at 20~Hz. The turret is driven toward the elevation of the target position $T_p=0.5$~s ahead (dashed marker), and a laser pulse engages when the beam-to-target distance is within $R_{\mathrm{eng}}=2$~m (dashed circle).}
 \label{fig:schem}
 \end{figure}
 
 \begin{figure}[t]
 \centering
 \begin{tikzpicture}[
-  font=\sffamily\scriptsize,
-  box/.style={draw, rounded corners=1.6pt, align=center, minimum height=0.74cm,
-              minimum width=1.02cm, fill=blue!7, inner sep=2pt},
+  font=\sffamily\scriptsize, >=Latex,
+  box/.style={draw, rounded corners=1.6pt, align=center, minimum height=0.80cm,
+              minimum width=1.46cm, fill=blue!7, inner sep=2pt},
   sum/.style={draw, circle, minimum size=0.46cm, inner sep=0pt, fill=white},
-  arr/.style={->, line width=0.45pt, >=Latex}]
+  arr/.style={->, line width=0.45pt}]
 % ---- top row: measurement, estimation, prediction, reference
-\node[box] (sens) at (0.50,3.55) {Radar\\$r,\theta$};
-\node[box] (kf)   at (2.25,3.55) {CA Kalman\\filter};
-\node[box] (pred) at (4.00,3.55) {Predict\\$T_p$};
-\node[box] (ref)  at (5.75,3.55) {Predicted\\$\theta_{\mathrm{ref}}$};
+\node[box] (sens) at (0.00,0) {Radar\\$(r,\theta)$};
+\node[box] (kf)   at (2.15,0) {CA Kalman\\filter};
+\node[box] (pred) at (4.30,0) {Predict\\$T_p=0.5$~s};
+\node[box] (ref)  at (6.45,0) {Predicted\\$\theta_{\mathrm{ref}}$};
 % ---- bottom row (right to left)
-\node[sum] (s1)    at (5.75,0.95) {};
-\node[box] (gc)    at (3.60,0.95) {$G_c(s)$};
-\node[box] (sat)   at (1.30,0.95) {Saturation\\+ dual mode};
-\node[box] (plant) at (-1.00,0.95) {Elevation\\drive $G_p(s)$};
-% ---- summing-junction signs
-\node[font=\scriptsize, anchor=east] at (5.62,1.20) {$+$};
-\node[font=\scriptsize, anchor=east] at (5.54,0.72) {$-$};
+\node[sum] (s1)    at (6.45,-1.75) {};
+\node[box] (gc)    at (4.30,-1.75) {Lag compensator\\$G_c(s)$};
+\node[box] (sat)   at (2.15,-1.75) {Saturation\\$+$ dual mode};
+\node[box] (plant) at (0.00,-1.75) {Elevation drive\\$G_p(s)$};
 % ---- signal paths
 \draw[arr] (sens) -- (kf);
 \draw[arr] (kf) -- (pred);
 \draw[arr] (pred) -- (ref);
 \draw[arr] (ref) -- (s1);
-\draw[arr] (s1) -- (gc);
+\draw[arr] (s1) -- node[above, pos=0.5] {$e$} (gc);
 \draw[arr] (gc) -- (sat);
-\draw[arr] (sat) -- (plant);
-\draw[arr] (plant.south) -- ++(0,-0.72) -| (s1.south);
-\node[font=\scriptsize, anchor=south] at (-1.00,0.10) {$\theta_t$};
+\draw[arr] (sat) -- node[above, pos=0.5] {$V_m$} (plant);
+\draw[arr] (plant.south) -- ++(0,-0.50) coordinate (fb) -| (s1.south);
+\node[above] at ($(fb)!0.5!(fb -| s1)$) {};
+\node[below] at ($(fb)!0.5!(fb -| s1)$) {turret elevation $\theta_t$};
+% ---- summing-junction signs
+\node[font=\scriptsize] at ($(s1)+(0.40,0.30)$) {$+$};
+\node[font=\scriptsize] at ($(s1)+(0.34,-0.32)$) {$-$};
 \end{tikzpicture}
 \caption{Finalized architecture: radar $\to$ CA estimator $\to$ $T_p=0.5$~s prediction $\to$ predicted elevation reference $\to$ lag-matched feedback compensator $G_c(s)$ with a bounded dual-mode acquisition front-end, voltage saturation and anti-windup $\to$ elevation drive, closed by the turret elevation $\theta_t$. The discrete pulse logic ($\hat x,\hat y,\theta_t\mapsto$\texttt{fire\_cmd}, with $t_{\mathrm{recharge}}=1$~s) is omitted for clarity.}
 \label{fig:block}
